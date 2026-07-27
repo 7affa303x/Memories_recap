@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0f1419;
+  --foreground: #f4efe6;
+  --muted: #9aa4b2;
+  --accent: #e8a87c;
+  --surface: rgba(255, 255, 255, 0.06);
+  --line: rgba(244, 239, 230, 0.12);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-surface: var(--surface);
+  --color-line: var(--line);
+  --font-sans: var(--font-body);
+  --font-display: var(--font-display);
+}
+
+body {
+  background:
+    radial-gradient(1200px 600px at 80% -10%, rgba(232, 168, 124, 0.18), transparent 55%),
+    radial-gradient(900px 500px at -10% 100%, rgba(88, 140, 160, 0.22), transparent 50%),
+    linear-gradient(160deg, #121820 0%, #0f1419 45%, #161210 100%);
+  color: var(--foreground);
+  min-height: 100vh;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes soft-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+.animate-rise {
+  animation: rise 0.7s ease-out both;
+}
+
+.animate-rise-delay {
+  animation: rise 0.8s ease-out 0.12s both;
+}
+
+.glow-orb {
+  animation: soft-pulse 5s ease-in-out infinite;
+}
