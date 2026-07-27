@@ -38,7 +38,7 @@ export default async function BillingPage({
 
         {params.portal === "missing" ? (
           <p className="rounded-[16px] bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            No Paddle customer yet. Complete a purchase first to open the portal.
+            No Creem customer yet. Complete a purchase first to open the portal.
           </p>
         ) : null}
 

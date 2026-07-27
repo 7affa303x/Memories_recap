@@ -2,8 +2,8 @@ export type CreditSource = "free" | "subscription" | "pack" | "refund_restore";
 
 export type BillingSubscription = {
   id: string;
-  paddleSubscriptionId: string;
-  paddlePriceId: string;
+  creemSubscriptionId: string;
+  creemProductId: string;
   status: string;
   currentPeriodStart: string | null;
   currentPeriodEnd: string | null;
@@ -17,7 +17,7 @@ export type CreditLot = {
   originalAmount: number;
   remainingAmount: number;
   expiresAt: string;
-  paddleEventId?: string | null;
+  creemEventId?: string | null;
   createdAt: string;
 };
 
@@ -35,8 +35,8 @@ export type BillingTransaction = {
   id: string;
   type: string;
   amount: number;
-  paddleEventId?: string | null;
-  paddleTransactionId?: string | null;
+  creemEventId?: string | null;
+  creemOrderId?: string | null;
   metadata?: Record<string, unknown>;
   createdAt: string;
 };
@@ -45,8 +45,9 @@ export type BillingState = {
   version: number;
   userId: string;
   email: string;
-  paddleCustomerId: string | null;
-  /** @deprecated legacy Polar field kept for Storage migration */
+  creemCustomerId: string | null;
+  /** @deprecated legacy fields for Storage migration */
+  paddleCustomerId?: string | null;
   polarCustomerId?: string | null;
   freeGranted: boolean;
   lots: CreditLot[];

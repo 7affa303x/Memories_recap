@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { usePaddle } from "@/components/paddle-provider";
 
 export function BuyButton({
   product,
@@ -11,7 +10,6 @@ export function BuyButton({
   product: "subscription" | "credits_small" | "credits_medium" | "credits_large";
   label: string;
 }) {
-  const { paddle, ready } = usePaddle();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -20,7 +18,7 @@ export function BuyButton({
       <Button
         type="button"
         className="h-12 w-full rounded-[16px] text-base"
-        disabled={pending || !ready}
+        disabled={pending}
         onClick={async () => {
           setPending(true);
           setError(null);
@@ -32,21 +30,15 @@ export function BuyButton({
             });
             const json = await res.json();
             if (!res.ok) throw new Error(json.error || "Checkout failed");
-            if (!json.transactionId) {
-              throw new Error("Missing transaction id");
-            }
-            if (!paddle) {
-              throw new Error("Paddle.js is not ready");
-            }
-            paddle.Checkout.open({ transactionId: json.transactionId });
-            setPending(false);
+            if (!json.url) throw new Error("Missing checkout URL");
+            window.location.href = json.url;
           } catch (err) {
             setError(err instanceof Error ? err.message : "Checkout failed");
             setPending(false);
           }
         }}
       >
-        {pending ? "Opening checkout…" : label}
+        {pending ? "Redirecting…" : label}
       </Button>
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
     </div>

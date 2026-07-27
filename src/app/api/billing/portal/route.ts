@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getAppUrl } from "@/lib/billing/config";
 import { getBillingSummary } from "@/lib/billing/credits";
-import { getPaddleClient } from "@/lib/billing/paddle";
+import { getCreemClient } from "@/lib/billing/creem";
 
 export async function GET() {
   const appUrl = getAppUrl();
@@ -12,20 +12,22 @@ export async function GET() {
   }
 
   const summary = await getBillingSummary(session.user.id, session.user.email);
-  if (!summary.paddleCustomerId) {
+  if (!summary.creemCustomerId) {
     return NextResponse.redirect(new URL("/billing?portal=missing", appUrl));
   }
 
   try {
-    const paddle = getPaddleClient();
-    const subscriptionIds = summary.subscription?.paddleSubscriptionId
-      ? [summary.subscription.paddleSubscriptionId]
-      : [];
-    const portal = await paddle.customerPortalSessions.create(
-      summary.paddleCustomerId,
-      subscriptionIds
-    );
-    return NextResponse.redirect(portal.urls.general.overview);
+    const creem = getCreemClient();
+    const portal = await creem.customers.generateBillingLinks({
+      customerId: summary.creemCustomerId,
+    });
+    if (!portal.customerPortalLink) {
+      return NextResponse.json(
+        { error: "Portal URL missing" },
+        { status: 500 }
+      );
+    }
+    return NextResponse.redirect(portal.customerPortalLink);
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Portal session failed";

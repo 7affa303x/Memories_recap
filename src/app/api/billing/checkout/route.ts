@@ -1,18 +1,8 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import {
-  findOrCreatePaddleCustomer,
-  getPaddleClient,
-} from "@/lib/billing/paddle";
-import {
-  getAppUrl,
-  getPriceId,
-} from "@/lib/billing/config";
+import { getCreemClient } from "@/lib/billing/creem";
+import { getAppUrl, getProductId } from "@/lib/billing/config";
 import type { ProductKey } from "@/lib/billing/types";
-import {
-  getBillingSummary,
-  setPaddleCustomerId,
-} from "@/lib/billing/credits";
 
 const ALLOWED: ProductKey[] = [
   "subscription",
@@ -34,34 +24,30 @@ export async function POST(request: Request) {
   }
 
   try {
-    const priceId = getPriceId(product);
-    const paddle = getPaddleClient();
+    const creem = getCreemClient();
     const appUrl = getAppUrl();
-    const summary = await getBillingSummary(session.user.id, session.user.email);
-
-    const customer = await findOrCreatePaddleCustomer({
-      email: session.user.email,
-      userId: session.user.id,
-      existingCustomerId: summary.paddleCustomerId,
-    });
-    await setPaddleCustomerId(session.user.id, session.user.email, customer.id);
-
-    const transaction = await paddle.transactions.create({
-      items: [{ priceId, quantity: 1 }],
-      customerId: customer.id,
-      customData: {
+    const checkout = await creem.checkouts.create({
+      productId: getProductId(product),
+      requestId: session.user.id,
+      successUrl: `${appUrl}/billing?checkout=success`,
+      customer: { email: session.user.email },
+      metadata: {
         userId: session.user.id,
         email: session.user.email,
         product,
       },
-      checkout: {
-        url: `${appUrl}/billing?checkout=success`,
-      },
     });
 
+    if (!checkout.checkoutUrl) {
+      return NextResponse.json(
+        { error: "Checkout URL missing" },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json({
-      transactionId: transaction.id,
-      id: transaction.id,
+      url: checkout.checkoutUrl,
+      id: checkout.id,
     });
   } catch (error) {
     const message =

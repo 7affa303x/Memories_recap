@@ -13,45 +13,37 @@ Google sign-in only. Original videos stay untouched.
 - Next.js App Router + TypeScript + Tailwind + shadcn/ui
 - Auth.js (Google OAuth)
 - Supabase (Storage + SQL migrations)
-- Paddle Billing
+- Creem Merchant of Record billing
 - FFmpeg processing on the server
 - Vercel
 
-## Billing (Paddle)
+## Billing (Creem)
 
 Pages:
 - `/pricing` — Free, Pro Monthly, Credit Packs
 - `/billing` — current credits, renewal, portal, invoices
 
 Webhook endpoint:
-- `POST /api/webhooks/paddle`
+- `POST /api/webhooks/creem`
 
-### Live setup
+### Setup
 
-1. Create a **live** Paddle API key → `PADDLE_API_KEY`
-2. Run catalog + webhook provisioning:
+1. Create a Creem account and API key (`creem_test_…` or live)
+2. Create products (or run `npm run setup:creem`)
+3. Set env vars (`CREEM_API_KEY`, `CREEM_PRODUCT_*`, `CREEM_WEBHOOK_SECRET`)
+4. In Creem dashboard → Developers → Webhooks, add:
+   `https://memories-recap-one.vercel.app/api/webhooks/creem`
+5. Copy the webhook signing secret into `CREEM_WEBHOOK_SECRET`
 
-```bash
-PADDLE_API_KEY=pdl_live_... NEXT_PUBLIC_PADDLE_ENV=production npm run setup:paddle
-```
-
-3. Copy printed values into `.env.local` and Vercel (Production/Preview/Development):
-   - `NEXT_PUBLIC_PADDLE_CLIENT_TOKEN` (`live_…`)
-   - `PADDLE_NOTIFICATION_WEBHOOK_SECRET`
-   - `PADDLE_PRICE_*`
-4. In Paddle dashboard → Checkout → Checkout settings:
-   - Default payment link = `https://memories-recap-one.vercel.app/billing`
-5. Confirm the live webhook destination is active for
-   `https://memories-recap-one.vercel.app/api/webhooks/paddle`
+Creem is the Merchant of Record — customers pay Creem, Creem pays you out (bank or USDC). No Stripe Connect onboarding for sellers.
 
 Credits:
 - Free one-time grant (`FREE_CREDITS`)
 - Subscription grants every cycle
 - Packs are one-time
 - All credits expire after `CREDIT_EXPIRY_DAYS` (default 90)
-- Processing deducts credits before render; failed jobs restore credits
 
-Catalog (USD, mirrored from tested Polar sandbox catalog):
+Catalog (USD):
 - Pro Monthly — $17 / 2000 credits
 - Small pack — $9 / 500 credits
 - Medium pack — $29 / 2000 credits
