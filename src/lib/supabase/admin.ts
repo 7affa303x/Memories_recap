@@ -1,18 +1,26 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-/** Server-only privileged client. Never import this into client components. */
-export function createServiceClient() {
+let admin: SupabaseClient | null = null;
+
+export function getServiceSupabase() {
+  if (admin) return admin;
+
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !key) {
-    throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
+    throw new Error("Missing Supabase service configuration");
   }
 
-  return createClient(url, key, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-    },
+  admin = createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
   });
+
+  return admin;
+}
+
+export function publicRecapUrl(path: string) {
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!base) throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL");
+  return `${base}/storage/v1/object/public/recaps/${path}`;
 }

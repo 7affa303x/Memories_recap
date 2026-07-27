@@ -2,7 +2,7 @@
 
 import { signIn, signOut } from "@/auth";
 
-export async function signInWithGoogle(callbackUrl = "/dashboard") {
+export async function signInWithGoogle(callbackUrl = "/upload") {
   await signIn("google", { redirectTo: callbackUrl });
 }
 

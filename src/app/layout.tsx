@@ -1,22 +1,24 @@
-import type { Metadata } from "next";
-import { Cairo, IBM_Plex_Sans_Arabic } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Roboto } from "next/font/google";
 import "./globals.css";
+import { cn } from "@/lib/utils";
 
-const display = Cairo({
-  variable: "--font-display",
-  subsets: ["arabic", "latin"],
-  weight: ["600", "700", "800"],
-});
-
-const body = IBM_Plex_Sans_Arabic({
-  variable: "--font-body",
-  subsets: ["arabic", "latin"],
-  weight: ["400", "500", "600"],
+const roboto = Roboto({
+  subsets: ["latin"],
+  weight: ["400", "500", "700"],
+  variable: "--font-roboto",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "Memorys Recap",
-  description: "سجّل دخولك بـ Google وابدأ بتجميع ذكرياتك",
+  title: "Memory Recap",
+  description: "Turn heavy memories into watchable moments.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#ffffff",
 };
 
 export default function RootLayout({
@@ -25,12 +27,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="ar"
-      dir="rtl"
-      className={`${display.variable} ${body.variable} h-full antialiased`}
-    >
-      <body className="min-h-full flex flex-col font-[family-name:var(--font-body)]">
+    <html lang="en" className={cn("h-full", roboto.variable)}>
+      <body className="min-h-full bg-white font-sans text-neutral-900">
         {children}
       </body>
     </html>

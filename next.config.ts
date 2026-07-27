@@ -9,6 +9,10 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  serverExternalPackages: ["ffmpeg-static", "fluent-ffmpeg"],
+  outputFileTracingIncludes: {
+    "/api/jobs/[jobId]/process": ["./node_modules/ffmpeg-static/**/*"],
+  },
 };
 
 export default nextConfig;
