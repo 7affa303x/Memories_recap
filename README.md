@@ -45,16 +45,14 @@ Authorized redirect URI:
 
 After deploy, add the production callback too.
 
-### Database migration
+## Data layer
 
-Apply schema once:
+Job metadata is stored in the private Supabase Storage bucket `app-data`
+(production-ready path isolation by user id). Video binaries use `memories`
+and finished outputs use public `recaps`.
 
-```bash
-curl -X POST "$AUTH_URL/api/setup/migrate" \
-  -H "x-setup-secret: $SETUP_SECRET"
-```
-
-Or paste `supabase/migrations/20260727170000_initial.sql` into the Supabase SQL editor.
+Postgres SQL remains in `supabase/migrations/` for when direct DB access is
+available (reset the database password in Supabase if pooler auth fails).
 
 ## Deploy
 

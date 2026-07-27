@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { getJobForUser } from "@/lib/jobs";
+import { createUpload, getJobForUser } from "@/lib/jobs";
 import { getServiceSupabase } from "@/lib/supabase/admin";
 import { nanoid } from "nanoid";
 
@@ -48,26 +48,18 @@ export async function POST(request: Request, { params }: Params) {
     );
   }
 
-  const { data: uploadRow, error: insertError } = await supabase
-    .from("uploads")
-    .insert({
-      job_id: jobId,
-      user_id: session.user.id,
-      storage_path: storagePath,
-      file_name: body.fileName,
-      mime_type: body.type,
-      size_bytes: body.size,
-      sort_order: body.sortOrder ?? 0,
-    })
-    .select("*")
-    .single();
-
-  if (insertError) {
-    return NextResponse.json({ error: insertError.message }, { status: 500 });
-  }
+  const upload = await createUpload({
+    jobId,
+    userId: session.user.id,
+    storagePath,
+    fileName: body.fileName,
+    mimeType: body.type,
+    sizeBytes: body.size,
+    sortOrder: body.sortOrder ?? 0,
+  });
 
   return NextResponse.json({
-    upload: uploadRow,
+    upload,
     signedUrl: signed.signedUrl,
     token: signed.token,
     path: signed.path,

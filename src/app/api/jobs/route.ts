@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { getServiceSupabase } from "@/lib/supabase/admin";
+import { createJob } from "@/lib/jobs";
 import { estimateProcessingSeconds } from "@/lib/types";
 
 export async function POST(request: Request) {
@@ -17,7 +17,6 @@ export async function POST(request: Request) {
   if (files.length === 0) {
     return NextResponse.json({ error: "Add at least one video" }, { status: 400 });
   }
-
   if (files.length > 20) {
     return NextResponse.json({ error: "Maximum 20 videos per recap" }, { status: 400 });
   }
@@ -27,25 +26,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Maximum 5 GB per recap" }, { status: 400 });
   }
 
-  const supabase = getServiceSupabase();
-  const { data, error } = await supabase
-    .from("jobs")
-    .insert({
-      user_id: session.user.id,
-      status: "uploading",
-      stage: "uploading",
-      progress: 0,
-      eta_seconds: estimateProcessingSeconds(totalBytes, files.length),
-      total_bytes: totalBytes,
-      file_count: files.length,
-      notify_email: session.user.email,
-    })
-    .select("*")
-    .single();
+  const job = await createJob({
+    userId: session.user.id,
+    email: session.user.email,
+    totalBytes,
+    fileCount: files.length,
+    etaSeconds: estimateProcessingSeconds(totalBytes, files.length),
+  });
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  return NextResponse.json({ job: data });
+  return NextResponse.json({ job });
 }

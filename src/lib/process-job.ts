@@ -6,7 +6,7 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import ffmpegPath from "ffmpeg-static";
 import { getServiceSupabase, publicRecapUrl } from "@/lib/supabase/admin";
-import { listUploads, updateJob } from "@/lib/jobs";
+import { listUploads, updateJob, upsertRecap } from "@/lib/jobs";
 import { spawn } from "node:child_process";
 
 function run(bin: string, args: string[]) {
@@ -56,9 +56,9 @@ export async function processJob(jobId: string, userId: string) {
   const bin = ffmpegPath;
   if (!bin) throw new Error("ffmpeg binary missing");
 
-  const uploads = await listUploads(jobId);
+  const uploads = await listUploads(jobId, userId);
   if (uploads.length === 0) {
-    await updateJob(jobId, {
+    await updateJob(jobId, userId, {
       status: "failed",
       stage: "failed",
       progress: 100,
@@ -71,7 +71,7 @@ export async function processJob(jobId: string, userId: string) {
   const clipPaths: string[] = [];
 
   try {
-    await updateJob(jobId, {
+    await updateJob(jobId, userId, {
       status: "analyzing",
       stage: "analyzing",
       progress: 10,
@@ -85,13 +85,13 @@ export async function processJob(jobId: string, userId: string) {
       await downloadToFile(upload.storage_path, dest);
       const duration = await probeDuration(dest, bin);
       localFiles.push({ path: dest, duration });
-      await updateJob(jobId, {
+      await updateJob(jobId, userId, {
         progress: 10 + Math.round(((index + 1) / uploads.length) * 20),
         eta_seconds: Math.max(30, 90 - index * 5),
       });
     }
 
-    await updateJob(jobId, {
+    await updateJob(jobId, userId, {
       status: "selecting",
       stage: "selecting",
       progress: 35,
@@ -129,12 +129,12 @@ export async function processJob(jobId: string, userId: string) {
         clip,
       ]);
       clipPaths.push(clip);
-      await updateJob(jobId, {
+      await updateJob(jobId, userId, {
         progress: 35 + Math.round(((index + 1) / localFiles.length) * 20),
       });
     }
 
-    await updateJob(jobId, {
+    await updateJob(jobId, userId, {
       status: "building",
       stage: "building",
       progress: 60,
@@ -161,7 +161,7 @@ export async function processJob(jobId: string, userId: string) {
       landscapeLocal,
     ]);
 
-    await updateJob(jobId, {
+    await updateJob(jobId, userId, {
       status: "rendering",
       stage: "rendering",
       progress: 78,
@@ -213,19 +213,15 @@ export async function processJob(jobId: string, userId: string) {
 
     const duration = await probeDuration(landscapeLocal, bin);
 
-    const { error: recapError } = await supabase.from("recaps").upsert(
-      {
-        job_id: jobId,
-        user_id: userId,
-        landscape_path: landscapePath,
-        vertical_path: verticalPath,
-        duration_seconds: duration,
-      },
-      { onConflict: "job_id" }
-    );
-    if (recapError) throw new Error(recapError.message);
+    await upsertRecap({
+      jobId,
+      userId,
+      landscapePath,
+      verticalPath,
+      durationSeconds: duration,
+    });
 
-    await updateJob(jobId, {
+    await updateJob(jobId, userId, {
       status: "completed",
       stage: "completed",
       progress: 100,
@@ -240,7 +236,7 @@ export async function processJob(jobId: string, userId: string) {
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Processing failed";
-    await updateJob(jobId, {
+    await updateJob(jobId, userId, {
       status: "failed",
       stage: "failed",
       progress: 100,

@@ -17,8 +17,8 @@ export async function GET(_request: Request, { params }: Params) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const uploads = await listUploads(jobId);
-  const recap = await getRecap(jobId);
+  const uploads = await listUploads(jobId, session.user.id);
+  const recap = await getRecap(jobId, session.user.id);
 
   return NextResponse.json({
     job,

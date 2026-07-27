@@ -23,68 +23,33 @@ async function uploadWithResume(
   signedUrl: string,
   onProgress: (pct: number) => void
 ) {
-  const chunkSize = 8 * 1024 * 1024;
-  const total = file.size;
-
-  if (total <= chunkSize) {
-    await new Promise<void>((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open("PUT", signedUrl);
-      xhr.setRequestHeader("Content-Type", file.type || "video/mp4");
-      xhr.upload.onprogress = (event) => {
-        if (event.lengthComputable) {
-          onProgress(Math.round((event.loaded / event.total) * 100));
-        }
-      };
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          onProgress(100);
-          resolve();
-        } else {
-          reject(new Error(`Upload failed (${xhr.status})`));
-        }
-      };
-      xhr.onerror = () => reject(new Error("Network error during upload"));
-      xhr.send(file);
-    });
+  const key = `upload-done:${file.name}:${file.size}:${file.lastModified}:${signedUrl}`;
+  if (sessionStorage.getItem(key) === "1") {
+    onProgress(100);
     return;
   }
 
-  // Chunked resume: store offset in sessionStorage keyed by file identity
-  const key = `upload-offset:${file.name}:${file.size}:${file.lastModified}`;
-  let offset = Number(sessionStorage.getItem(key) || "0");
-  if (Number.isNaN(offset) || offset < 0 || offset > total) offset = 0;
-
-  while (offset < total) {
-    const end = Math.min(offset + chunkSize, total);
-    const chunk = file.slice(offset, end);
-    await new Promise<void>((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open("PUT", signedUrl);
-      xhr.setRequestHeader("Content-Type", file.type || "video/mp4");
-      xhr.setRequestHeader("x-upsert", "true");
-      xhr.upload.onprogress = (event) => {
-        if (!event.lengthComputable) return;
-        const loaded = offset + event.loaded;
-        onProgress(Math.min(99, Math.round((loaded / total) * 100)));
-      };
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          offset = end;
-          sessionStorage.setItem(key, String(offset));
-          onProgress(Math.round((offset / total) * 100));
-          resolve();
-        } else {
-          reject(new Error(`Chunk upload failed (${xhr.status})`));
-        }
-      };
-      xhr.onerror = () => reject(new Error("Network error during upload"));
-      xhr.send(chunk);
-    });
-  }
-
-  sessionStorage.removeItem(key);
-  onProgress(100);
+  await new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", signedUrl);
+    xhr.setRequestHeader("Content-Type", file.type || "video/mp4");
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) {
+        onProgress(Math.round((event.loaded / event.total) * 100));
+      }
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        sessionStorage.setItem(key, "1");
+        onProgress(100);
+        resolve();
+      } else {
+        reject(new Error(`Upload failed (${xhr.status})`));
+      }
+    };
+    xhr.onerror = () => reject(new Error("Network error during upload"));
+    xhr.send(file);
+  });
 }
 
 export function UploadWorkspace() {

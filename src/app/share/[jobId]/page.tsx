@@ -16,7 +16,7 @@ export default async function SharePage({ params }: Props) {
   if (!job) notFound();
   if (job.status !== "completed") redirect(`/processing/${jobId}`);
 
-  const recap = await getRecap(jobId);
+  const recap = await getRecap(jobId, user.id);
   if (!recap?.landscape_path || !recap.vertical_path) {
     redirect(`/processing/${jobId}`);
   }

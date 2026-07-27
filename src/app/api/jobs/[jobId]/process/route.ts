@@ -16,7 +16,8 @@ export async function POST(_request: Request, { params }: Params) {
   }
 
   const { jobId } = await params;
-  const job = await getJobForUser(jobId, session.user.id);
+  const userId = session.user.id;
+  const job = await getJobForUser(jobId, userId);
   if (!job) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
@@ -34,19 +35,17 @@ export async function POST(_request: Request, { params }: Params) {
     return NextResponse.json({ ok: true, status: job.status, alreadyRunning: true });
   }
 
-  const uploads = await listUploads(jobId);
+  const uploads = await listUploads(jobId, userId);
   if (uploads.length === 0) {
     return NextResponse.json({ error: "Upload videos first" }, { status: 400 });
   }
 
-  await updateJob(jobId, {
+  await updateJob(jobId, userId, {
     status: "analyzing",
     stage: "analyzing",
     progress: 5,
     error: null,
   });
-
-  const userId = session.user.id;
 
   after(async () => {
     try {
