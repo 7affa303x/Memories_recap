@@ -39,11 +39,15 @@ npm run dev
 
 ### Google Cloud
 
-Authorized redirect URI:
+Add ALL of these (do not replace — keep both local and production):
 
-`http://localhost:3000/api/auth/callback/google`
+Authorized JavaScript origins:
+- `http://localhost:3000`
+- `https://memories-recap-one.vercel.app`
 
-After deploy, add the production callback too.
+Authorized redirect URIs:
+- `http://localhost:3000/api/auth/callback/google`
+- `https://memories-recap-one.vercel.app/api/auth/callback/google`
 
 ## Data layer
 

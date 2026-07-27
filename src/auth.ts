@@ -11,16 +11,23 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   ],
   pages: {
     signIn: "/",
+    error: "/",
   },
   callbacks: {
     async signIn({ user, account }) {
       if (!user.email || !account?.providerAccountId) return false;
-      await upsertUser({
-        id: account.providerAccountId,
-        email: user.email,
-        name: user.name ?? null,
-        image: user.image ?? null,
-      });
+
+      try {
+        await upsertUser({
+          id: account.providerAccountId,
+          email: user.email,
+          name: user.name ?? null,
+          image: user.image ?? null,
+        });
+      } catch (error) {
+        console.error("upsertUser failed", error);
+      }
+
       return true;
     },
     async jwt({ token, account, profile }) {

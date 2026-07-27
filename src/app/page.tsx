@@ -1,7 +1,8 @@
 import { getOptionalUser } from "@/lib/session";
-import { signInWithGoogle, signOutAction } from "@/app/actions/auth";
+import { signOutAction } from "@/app/actions/auth";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
+import { GoogleSignInButton } from "@/components/google-sign-in-button";
 
 export default async function LandingPage({
   searchParams,
@@ -38,7 +39,7 @@ export default async function LandingPage({
 
         {params.error ? (
           <p className="mt-6 rounded-[16px] bg-red-50 px-4 py-3 text-sm text-red-700">
-            Sign in failed. Please try again.
+            Sign in failed. Clear cookies for this site, then try again.
           </p>
         ) : null}
 
@@ -48,14 +49,7 @@ export default async function LandingPage({
               <a href="/upload">Upload memories</a>
             </Button>
           ) : (
-            <form action={signInWithGoogle.bind(null, callbackUrl)}>
-              <Button
-                type="submit"
-                className="h-12 w-full rounded-[16px] text-base"
-              >
-                Upload memories
-              </Button>
-            </form>
+            <GoogleSignInButton callbackUrl={callbackUrl} />
           )}
         </div>
 
