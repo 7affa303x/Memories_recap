@@ -7,6 +7,20 @@ import { STAGE_LABELS, type JobRow } from "@/lib/types";
 
 const STAGES = ["analyzing", "selecting", "building", "rendering"] as const;
 
+function notifyRecapReady() {
+  try {
+    if (typeof window === "undefined") return;
+    if (!("Notification" in window)) return;
+    if (typeof Notification !== "function") return;
+    if (Notification.permission !== "granted") return;
+    new Notification("Memory Recap is ready", {
+      body: "Your recap finished processing.",
+    });
+  } catch {
+    // Some mobile browsers disallow `new Notification()` outside a service worker.
+  }
+}
+
 export function ProcessingTracker({ jobId }: { jobId: string }) {
   const router = useRouter();
   const [job, setJob] = useState<JobRow | null>(null);
@@ -28,13 +42,7 @@ export function ProcessingTracker({ jobId }: { jobId: string }) {
         setError(null);
 
         if (nextJob.status === "completed") {
-          if (typeof window !== "undefined" && "Notification" in window) {
-            if (Notification.permission === "granted") {
-              new Notification("Memory Recap is ready", {
-                body: "Your recap finished processing.",
-              });
-            }
-          }
+          notifyRecapReady();
           router.replace(`/result/${jobId}`);
           return;
         }
@@ -55,10 +63,12 @@ export function ProcessingTracker({ jobId }: { jobId: string }) {
 
     tick();
 
-    if (typeof window !== "undefined" && "Notification" in window) {
-      if (Notification.permission === "default") {
-        Notification.requestPermission().catch(() => undefined);
+    try {
+      if ("Notification" in window && Notification.permission === "default") {
+        void Notification.requestPermission();
       }
+    } catch {
+      // Ignore unsupported notification permission flows.
     }
 
     return () => {
