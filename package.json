@@ -6,11 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "setup:paddle": "node scripts/setup-paddle-live.mjs"
   },
   "dependencies": {
-    "@polar-sh/nextjs": "^0.9.6",
-    "@polar-sh/sdk": "^0.49.0",
+    "@paddle/paddle-js": "^1.6.4",
+    "@paddle/paddle-node-sdk": "^3.8.0",
     "@supabase/ssr": "^0.12.3",
     "@supabase/supabase-js": "^2.110.9",
     "@types/fluent-ffmpeg": "^2.1.28",

@@ -2,252 +2,244 @@ import {
   grantCredits,
   markWebhookProcessed,
   restoreCreditsForRefund,
-  setPolarCustomerId,
+  setPaddleCustomerId,
   upsertSubscription,
 } from "@/lib/billing/credits";
 import {
   PRODUCT_CREDITS,
-  productKeyFromId,
+  productKeyFromPriceId,
 } from "@/lib/billing/config";
+import { getPaddleClient } from "@/lib/billing/paddle";
+import type { ProductKey } from "@/lib/billing/types";
+import type {
+  AdjustmentNotification,
+  EventEntity,
+  SubscriptionNotification,
+  TransactionNotification,
+} from "@paddle/paddle-node-sdk";
+import { EventName } from "@paddle/paddle-node-sdk";
 
-function customerExternalId(customer: {
-  externalId?: string | null;
-  metadata?: Record<string, unknown> | null;
-}) {
-  if (customer.externalId) return customer.externalId;
-  const meta = customer.metadata ?? {};
-  if (typeof meta.userId === "string") return meta.userId;
-  return null;
+type CustomData = Record<string, unknown> | null | undefined;
+
+function customString(data: CustomData, key: string) {
+  if (!data) return null;
+  const value = data[key];
+  return typeof value === "string" && value.length > 0 ? value : null;
 }
 
-function customerEmail(customer: { email?: string | null }, fallback?: string) {
-  return customer.email || fallback || "unknown@memoryrecap.app";
+function userFromCustomData(data: CustomData) {
+  return customString(data, "userId") || customString(data, "user_id");
 }
 
-async function withIdempotency(eventId: string, type: string, fn: () => Promise<void>) {
+function emailFromCustomData(data: CustomData, fallback?: string | null) {
+  return (
+    customString(data, "email") ||
+    fallback ||
+    "unknown@memoryrecap.app"
+  );
+}
+
+async function withIdempotency(
+  eventId: string,
+  type: string,
+  fn: () => Promise<void>
+) {
   const fresh = await markWebhookProcessed(eventId, type);
   if (!fresh) return;
   await fn();
 }
 
-export async function handleOrderPaid(payload: {
-  data: {
-    id: string;
-    customer?: {
-      id?: string;
-      externalId?: string | null;
-      email?: string | null;
-      metadata?: Record<string, unknown> | null;
-    } | null;
-    product?: { id?: string } | null;
-    productId?: string | null;
-    subscription?: { id?: string } | null;
-    metadata?: Record<string, unknown> | null;
-  };
-}) {
-  const order = payload.data;
-  const eventId = `order.paid:${order.id}`;
-  await withIdempotency(eventId, "order.paid", async () => {
-    const customer = order.customer;
-    if (!customer) return;
-    const userId = customerExternalId(customer);
-    if (!userId) return;
-    const email = customerEmail(customer);
-    if (customer.id) {
-      await setPolarCustomerId(userId, email, customer.id);
+function priceIdsFromTransaction(tx: TransactionNotification) {
+  return tx.items
+    .map((item) => item.price?.id)
+    .filter((id): id is string => Boolean(id));
+}
+
+function productKeyFromTransaction(tx: TransactionNotification): ProductKey | null {
+  const fromCustom = customString(tx.customData, "product") as ProductKey | null;
+  if (
+    fromCustom &&
+    ["subscription", "credits_small", "credits_medium", "credits_large"].includes(
+      fromCustom
+    )
+  ) {
+    return fromCustom;
+  }
+  for (const priceId of priceIdsFromTransaction(tx)) {
+    const key = productKeyFromPriceId(priceId);
+    if (key) return key;
+  }
+  return null;
+}
+
+function priceIdFromSubscription(sub: SubscriptionNotification) {
+  return sub.items[0]?.price?.id || "";
+}
+
+async function resolveUserFromCustomer(customerId: string | null | undefined) {
+  if (!customerId) return null;
+  try {
+    const paddle = getPaddleClient();
+    const customer = await paddle.customers.get(customerId);
+    const userId = userFromCustomData(customer.customData);
+    if (!userId) return null;
+    return {
+      userId,
+      email: emailFromCustomData(customer.customData, customer.email),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function handleTransactionCompleted(tx: TransactionNotification) {
+  const eventId = `transaction.completed:${tx.id}`;
+  await withIdempotency(eventId, EventName.TransactionCompleted, async () => {
+    let userId = userFromCustomData(tx.customData);
+    let email = emailFromCustomData(tx.customData);
+    if (!userId) {
+      const resolved = await resolveUserFromCustomer(tx.customerId);
+      if (!resolved) return;
+      userId = resolved.userId;
+      email = resolved.email;
+    }
+    if (tx.customerId) {
+      await setPaddleCustomerId(userId, email, tx.customerId);
     }
 
-    const productId = order.product?.id || order.productId || "";
-    const key = productKeyFromId(productId);
+    const key = productKeyFromTransaction(tx);
     if (!key) return;
 
-    // Subscription renewals are handled on subscription events; packs grant here.
-    if (key === "subscription") {
-      if (!order.subscription?.id) {
-        // First subscription order also grants cycle credits once.
-        await grantCredits({
-          userId,
-          email,
-          amount: PRODUCT_CREDITS.subscription,
-          source: "subscription",
-          polarEventId: eventId,
-          polarOrderId: order.id,
-          type: "subscription_cycle_grant",
-          metadata: { productId },
-        });
-      }
-      return;
-    }
+    // Subscription cycle grants are handled on subscription.activated / renewals.
+    if (key === "subscription") return;
 
     await grantCredits({
       userId,
       email,
       amount: PRODUCT_CREDITS[key],
       source: "pack",
-      polarEventId: eventId,
-      polarOrderId: order.id,
+      paddleEventId: eventId,
+      paddleTransactionId: tx.id,
       type: `pack_${key}`,
-      metadata: { productId },
+      metadata: { priceIds: priceIdsFromTransaction(tx) },
     });
   });
 }
 
-export async function handleCheckoutUpdated(payload: {
-  data: {
-    id: string;
-    status?: string;
-    customerId?: string | null;
-    customerExternalId?: string | null;
-    customerEmail?: string | null;
-    metadata?: Record<string, unknown> | null;
-  };
-}) {
-  const checkout = payload.data;
-  if (checkout.status !== "succeeded" && checkout.status !== "complete") return;
-
-  const eventId = `checkout.completed:${checkout.id}`;
-  await withIdempotency(eventId, "checkout.completed", async () => {
-    const userId =
-      checkout.customerExternalId ||
-      (typeof checkout.metadata?.userId === "string"
-        ? checkout.metadata.userId
-        : null);
-    if (!userId) return;
-    const email =
-      checkout.customerEmail ||
-      (typeof checkout.metadata?.email === "string"
-        ? checkout.metadata.email
-        : "unknown@memoryrecap.app");
-    if (checkout.customerId) {
-      await setPolarCustomerId(userId, email, checkout.customerId);
-    }
-  });
-}
-
 export async function handleSubscriptionEvent(
-  type: string,
-  payload: {
-    data: {
-      id: string;
-      status?: string;
-      cancelAtPeriodEnd?: boolean | null;
-      currentPeriodStart?: string | Date | null;
-      currentPeriodEnd?: string | Date | null;
-      productId?: string | null;
-      product?: { id?: string } | null;
-      customer?: {
-        id?: string;
-        externalId?: string | null;
-        email?: string | null;
-        metadata?: Record<string, unknown> | null;
-      } | null;
-    };
-  }
+  type: EventName,
+  sub: SubscriptionNotification
 ) {
-  const sub = payload.data;
-  const eventId = `${type}:${sub.id}:${sub.status}:${sub.currentPeriodEnd}`;
-  await withIdempotency(eventId, type, async () => {
-    const customer = sub.customer;
-    if (!customer) return;
-    const userId = customerExternalId(customer);
-    if (!userId) return;
-    const email = customerEmail(customer);
-    if (customer.id) await setPolarCustomerId(userId, email, customer.id);
+  const periodStart = sub.currentBillingPeriod?.startsAt || null;
+  const periodEnd = sub.currentBillingPeriod?.endsAt || null;
+  const eventId = `${type}:${sub.id}:${sub.status}:${periodEnd || "none"}`;
 
-    const productId = sub.product?.id || sub.productId || "";
-    const periodStart = sub.currentPeriodStart
-      ? new Date(sub.currentPeriodStart).toISOString()
-      : null;
-    const periodEnd = sub.currentPeriodEnd
-      ? new Date(sub.currentPeriodEnd).toISOString()
-      : null;
+  await withIdempotency(eventId, type, async () => {
+    let userId = userFromCustomData(sub.customData);
+    let email = emailFromCustomData(sub.customData);
+    if (!userId) {
+      const resolved = await resolveUserFromCustomer(sub.customerId);
+      if (!resolved) return;
+      userId = resolved.userId;
+      email = resolved.email;
+    }
+    if (sub.customerId) {
+      await setPaddleCustomerId(userId, email, sub.customerId);
+    }
+
+    const priceId = priceIdFromSubscription(sub);
+    const cancelAtPeriodEnd =
+      sub.scheduledChange?.action === "cancel" || Boolean(sub.canceledAt);
 
     await upsertSubscription({
       userId,
       email,
       subscription: {
         id: sub.id,
-        polarSubscriptionId: sub.id,
-        polarProductId: productId,
-        status: sub.status || type,
+        paddleSubscriptionId: sub.id,
+        paddlePriceId: priceId,
+        status: sub.status,
         currentPeriodStart: periodStart,
         currentPeriodEnd: periodEnd,
-        cancelAtPeriodEnd: Boolean(sub.cancelAtPeriodEnd),
+        cancelAtPeriodEnd,
         updatedAt: new Date().toISOString(),
       },
     });
 
-    if (
-      (type === "subscription.created" || type === "subscription.active") &&
-      productKeyFromId(productId) === "subscription"
-    ) {
-      await grantCredits({
-        userId,
-        email,
-        amount: PRODUCT_CREDITS.subscription,
-        source: "subscription",
-        polarEventId: `sub-grant:${sub.id}:${periodStart || "start"}`,
-        type: "subscription_cycle_grant",
-        metadata: { subscriptionId: sub.id, productId },
-      });
-    }
+    const isActiveGrant =
+      type === EventName.SubscriptionActivated ||
+      type === EventName.SubscriptionCreated ||
+      (type === EventName.SubscriptionUpdated &&
+        (sub.status === "active" || sub.status === "trialing"));
 
-    // Renewals often arrive as subscription.updated with a new period.
-    if (type === "subscription.updated" && periodStart) {
+    if (isActiveGrant && productKeyFromPriceId(priceId) === "subscription") {
       await grantCredits({
         userId,
         email,
         amount: PRODUCT_CREDITS.subscription,
         source: "subscription",
-        polarEventId: `sub-grant:${sub.id}:${periodStart}`,
+        paddleEventId: `sub-grant:${sub.id}:${periodStart || "start"}`,
         type: "subscription_cycle_grant",
-        metadata: { subscriptionId: sub.id, productId },
+        metadata: { subscriptionId: sub.id, priceId },
       });
     }
   });
 }
 
-export async function handleRefundCreated(payload: {
-  data: {
-    id: string;
-    amount?: number | null;
-    orderId?: string | null;
-    customer?: {
-      id?: string;
-      externalId?: string | null;
-      email?: string | null;
-      metadata?: Record<string, unknown> | null;
-    } | null;
-    metadata?: Record<string, unknown> | null;
-  };
-}) {
-  const refund = payload.data;
-  const eventId = `refund.created:${refund.id}`;
-  await withIdempotency(eventId, "refund.created", async () => {
-    const customer = refund.customer;
-    if (!customer) return;
-    const userId = customerExternalId(customer);
-    if (!userId) return;
-    const email = customerEmail(customer);
-    const jobId =
-      typeof refund.metadata?.jobId === "string" ? refund.metadata.jobId : null;
+export async function handleAdjustmentUpdated(adj: AdjustmentNotification) {
+  if (adj.action !== "refund") return;
+  if (adj.status !== "approved") return;
 
-    // Credit packs: restore by configured pack size when amount unknown.
-    // Prefer explicit metadata.credits when present.
-    const credits =
-      typeof refund.metadata?.credits === "number"
-        ? refund.metadata.credits
-        : typeof refund.metadata?.credits === "string"
-          ? Number(refund.metadata.credits)
-          : 0;
+  const eventId = `adjustment.approved:${adj.id}`;
+  await withIdempotency(eventId, EventName.AdjustmentUpdated, async () => {
+    try {
+      const paddle = getPaddleClient();
+      const tx = await paddle.transactions.get(adj.transactionId);
+      const userId = userFromCustomData(tx.customData);
+      if (!userId) return;
+      const email = emailFromCustomData(tx.customData);
+      const product = customString(tx.customData, "product") as ProductKey | null;
+      const amount =
+        product && product !== "subscription"
+          ? PRODUCT_CREDITS[product]
+          : product === "subscription"
+            ? PRODUCT_CREDITS.subscription
+            : 0;
 
-    await restoreCreditsForRefund({
-      userId,
-      email,
-      amount: Number.isFinite(credits) && credits > 0 ? credits : 0,
-      polarEventId: eventId,
-      polarOrderId: refund.orderId ?? null,
-      jobId,
-    });
+      await restoreCreditsForRefund({
+        userId,
+        email,
+        amount,
+        paddleEventId: eventId,
+        paddleTransactionId: adj.transactionId,
+      });
+    } catch (error) {
+      console.error("adjustment restore failed", error);
+    }
   });
+}
+
+export async function handlePaddleEvent(event: EventEntity) {
+  switch (event.eventType) {
+    case EventName.TransactionCompleted:
+      await handleTransactionCompleted(event.data as TransactionNotification);
+      break;
+    case EventName.SubscriptionActivated:
+    case EventName.SubscriptionCreated:
+    case EventName.SubscriptionUpdated:
+    case EventName.SubscriptionCanceled:
+    case EventName.SubscriptionPastDue:
+    case EventName.SubscriptionPaused:
+    case EventName.SubscriptionResumed:
+      await handleSubscriptionEvent(
+        event.eventType,
+        event.data as SubscriptionNotification
+      );
+      break;
+    case EventName.AdjustmentUpdated:
+      await handleAdjustmentUpdated(event.data as AdjustmentNotification);
+      break;
+    default:
+      break;
+  }
 }

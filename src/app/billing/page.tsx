@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 export default async function BillingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ checkout?: string }>;
+  searchParams: Promise<{ checkout?: string; portal?: string }>;
 }) {
   const user = await requireUser();
   const params = await searchParams;
@@ -33,6 +33,12 @@ export default async function BillingPage({
         {params.checkout === "success" ? (
           <p className="rounded-[16px] bg-green-50 px-4 py-3 text-sm text-green-800">
             Payment received. Credits appear after webhook confirmation.
+          </p>
+        ) : null}
+
+        {params.portal === "missing" ? (
+          <p className="rounded-[16px] bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            No Paddle customer yet. Complete a purchase first to open the portal.
           </p>
         ) : null}
 

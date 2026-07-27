@@ -13,29 +13,36 @@ Google sign-in only. Original videos stay untouched.
 - Next.js App Router + TypeScript + Tailwind + shadcn/ui
 - Auth.js (Google OAuth)
 - Supabase (Storage + SQL migrations)
-- Polar.sh billing
+- Paddle Billing
 - FFmpeg processing on the server
 - Vercel
 
-## Billing (Polar)
+## Billing (Paddle)
 
 Pages:
 - `/pricing` — Free, Pro Monthly, Credit Packs
 - `/billing` — current credits, renewal, portal, invoices
 
 Webhook endpoint:
-- `POST /api/webhooks/polar`
+- `POST /api/webhooks/paddle`
 
-### Polar setup
+### Live setup
 
-1. Create an Organization Access Token → `POLAR_ACCESS_TOKEN`
-2. Create products in Polar dashboard:
-   - Monthly Subscription
-   - Small / Medium / Large credit packs
-3. Put product IDs in env (`POLAR_PRODUCT_*`)
-4. Add webhook to `https://memories-recap-one.vercel.app/api/webhooks/polar`
-   Events: checkout updated, order paid, subscription created/updated/canceled, refund created
-5. Put signing secret in `POLAR_WEBHOOK_SECRET`
+1. Create a **live** Paddle API key → `PADDLE_API_KEY`
+2. Run catalog + webhook provisioning:
+
+```bash
+PADDLE_API_KEY=pdl_live_... NEXT_PUBLIC_PADDLE_ENV=production npm run setup:paddle
+```
+
+3. Copy printed values into `.env.local` and Vercel (Production/Preview/Development):
+   - `NEXT_PUBLIC_PADDLE_CLIENT_TOKEN` (`live_…`)
+   - `PADDLE_NOTIFICATION_WEBHOOK_SECRET`
+   - `PADDLE_PRICE_*`
+4. In Paddle dashboard → Checkout → Checkout settings:
+   - Default payment link = `https://memories-recap-one.vercel.app/billing`
+5. Confirm the live webhook destination is active for
+   `https://memories-recap-one.vercel.app/api/webhooks/paddle`
 
 Credits:
 - Free one-time grant (`FREE_CREDITS`)
@@ -43,6 +50,12 @@ Credits:
 - Packs are one-time
 - All credits expire after `CREDIT_EXPIRY_DAYS` (default 90)
 - Processing deducts credits before render; failed jobs restore credits
+
+Catalog (USD, mirrored from tested Polar sandbox catalog):
+- Pro Monthly — $17 / 2000 credits
+- Small pack — $9 / 500 credits
+- Medium pack — $29 / 2000 credits
+- Large pack — $69 / 5000 credits
 
 ## Setup
 

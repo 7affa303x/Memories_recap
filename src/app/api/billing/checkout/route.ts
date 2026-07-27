@@ -1,11 +1,18 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { getPolarClient } from "@/lib/billing/polar";
+import {
+  findOrCreatePaddleCustomer,
+  getPaddleClient,
+} from "@/lib/billing/paddle";
 import {
   getAppUrl,
-  getProductId,
+  getPriceId,
 } from "@/lib/billing/config";
 import type { ProductKey } from "@/lib/billing/types";
+import {
+  getBillingSummary,
+  setPaddleCustomerId,
+} from "@/lib/billing/credits";
 
 const ALLOWED: ProductKey[] = [
   "subscription",
@@ -27,35 +34,35 @@ export async function POST(request: Request) {
   }
 
   try {
-    const productId = getProductId(product);
-    const polar = getPolarClient();
+    const priceId = getPriceId(product);
+    const paddle = getPaddleClient();
     const appUrl = getAppUrl();
+    const summary = await getBillingSummary(session.user.id, session.user.email);
 
-    const checkout = await polar.checkouts.create({
-      products: [productId],
-      externalCustomerId: session.user.id,
-      customerEmail: session.user.email,
-      customerMetadata: {
-        userId: session.user.id,
-        email: session.user.email,
-      },
-      metadata: {
+    const customer = await findOrCreatePaddleCustomer({
+      email: session.user.email,
+      userId: session.user.id,
+      existingCustomerId: summary.paddleCustomerId,
+    });
+    await setPaddleCustomerId(session.user.id, session.user.email, customer.id);
+
+    const transaction = await paddle.transactions.create({
+      items: [{ priceId, quantity: 1 }],
+      customerId: customer.id,
+      customData: {
         userId: session.user.id,
         email: session.user.email,
         product,
       },
-      successUrl: `${appUrl}/billing?checkout=success`,
-      returnUrl: `${appUrl}/pricing`,
+      checkout: {
+        url: `${appUrl}/billing?checkout=success`,
+      },
     });
 
-    if (!checkout.url) {
-      return NextResponse.json(
-        { error: "Checkout URL missing" },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json({ url: checkout.url, id: checkout.id });
+    return NextResponse.json({
+      transactionId: transaction.id,
+      id: transaction.id,
+    });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Checkout creation failed";

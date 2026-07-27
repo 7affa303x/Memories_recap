@@ -20,7 +20,7 @@ function emptyState(userId: string, email: string): BillingState {
     version: 0,
     userId,
     email,
-    polarCustomerId: null,
+    paddleCustomerId: null,
     freeGranted: false,
     lots: [],
     subscription: null,
@@ -31,13 +31,59 @@ function emptyState(userId: string, email: string): BillingState {
   };
 }
 
+function normalizeState(raw: BillingState): BillingState {
+  const anyRaw = raw as BillingState & {
+    polarCustomerId?: string | null;
+    subscription?: (BillingSubscription & {
+      polarSubscriptionId?: string;
+      polarProductId?: string;
+    }) | null;
+  };
+
+  if (!anyRaw.paddleCustomerId && anyRaw.polarCustomerId) {
+    anyRaw.paddleCustomerId = null;
+  }
+
+  if (anyRaw.subscription) {
+    const sub = anyRaw.subscription;
+    if (!sub.paddleSubscriptionId && sub.polarSubscriptionId) {
+      sub.paddleSubscriptionId = sub.polarSubscriptionId;
+    }
+    if (!sub.paddlePriceId && sub.polarProductId) {
+      sub.paddlePriceId = sub.polarProductId;
+    }
+  }
+
+  for (const lot of anyRaw.lots ?? []) {
+    const legacy = lot as CreditLot & { polarEventId?: string | null };
+    if (!legacy.paddleEventId && legacy.polarEventId) {
+      legacy.paddleEventId = legacy.polarEventId;
+    }
+  }
+
+  for (const tx of anyRaw.transactions ?? []) {
+    const legacy = tx as BillingTransaction & {
+      polarEventId?: string | null;
+      polarOrderId?: string | null;
+    };
+    if (!legacy.paddleEventId && legacy.polarEventId) {
+      legacy.paddleEventId = legacy.polarEventId;
+    }
+    if (!legacy.paddleTransactionId && legacy.polarOrderId) {
+      legacy.paddleTransactionId = legacy.polarOrderId;
+    }
+  }
+
+  return anyRaw;
+}
+
 async function readState(userId: string): Promise<BillingState | null> {
   const supabase = getServiceSupabase();
   const { data, error } = await supabase.storage
     .from(BUCKET)
     .download(`billing/${userId}.json`);
   if (error || !data) return null;
-  return JSON.parse(await data.text()) as BillingState;
+  return normalizeState(JSON.parse(await data.text()) as BillingState);
 }
 
 async function writeState(state: BillingState) {
@@ -87,7 +133,7 @@ function addLot(
   input: {
     amount: number;
     source: CreditSource;
-    polarEventId?: string | null;
+    paddleEventId?: string | null;
   }
 ) {
   const lot: CreditLot = {
@@ -98,7 +144,7 @@ function addLot(
     expiresAt: new Date(
       Date.now() + CREDIT_EXPIRY_DAYS * 24 * 60 * 60 * 1000
     ).toISOString(),
-    polarEventId: input.polarEventId ?? null,
+    paddleEventId: input.paddleEventId ?? null,
     createdAt: new Date().toISOString(),
   };
   state.lots.push(lot);
@@ -155,17 +201,17 @@ export async function getBillingSummary(userId: string, email: string) {
     ),
     transactions: state.transactions.slice(0, 50),
     history: state.history.slice(0, 50),
-    polarCustomerId: state.polarCustomerId,
+    paddleCustomerId: state.paddleCustomerId,
   };
 }
 
-export async function setPolarCustomerId(
+export async function setPaddleCustomerId(
   userId: string,
   email: string,
-  polarCustomerId: string
+  paddleCustomerId: string
 ) {
   return mutate(userId, email, (state) => {
-    state.polarCustomerId = polarCustomerId;
+    state.paddleCustomerId = paddleCustomerId;
   });
 }
 
@@ -174,29 +220,29 @@ export async function grantCredits(input: {
   email: string;
   amount: number;
   source: CreditSource;
-  polarEventId: string;
-  polarOrderId?: string | null;
+  paddleEventId: string;
+  paddleTransactionId?: string | null;
   type: string;
   metadata?: Record<string, unknown>;
 }) {
   return mutate(input.userId, input.email, (state) => {
     if (
-      input.polarEventId &&
-      state.transactions.some((tx) => tx.polarEventId === input.polarEventId)
+      input.paddleEventId &&
+      state.transactions.some((tx) => tx.paddleEventId === input.paddleEventId)
     ) {
       return;
     }
     addLot(state, {
       amount: input.amount,
       source: input.source,
-      polarEventId: input.polarEventId,
+      paddleEventId: input.paddleEventId,
     });
     const tx: BillingTransaction = {
       id: randomUUID(),
       type: input.type,
       amount: input.amount,
-      polarEventId: input.polarEventId,
-      polarOrderId: input.polarOrderId ?? null,
+      paddleEventId: input.paddleEventId,
+      paddleTransactionId: input.paddleTransactionId ?? null,
       metadata: input.metadata ?? {},
       createdAt: new Date().toISOString(),
     };
@@ -315,12 +361,12 @@ export async function restoreCreditsForRefund(input: {
   userId: string;
   email: string;
   amount: number;
-  polarEventId: string;
-  polarOrderId?: string | null;
+  paddleEventId: string;
+  paddleTransactionId?: string | null;
   jobId?: string | null;
 }) {
   return mutate(input.userId, input.email, (state) => {
-    if (state.transactions.some((tx) => tx.polarEventId === input.polarEventId)) {
+    if (state.transactions.some((tx) => tx.paddleEventId === input.paddleEventId)) {
       return;
     }
 
@@ -331,8 +377,8 @@ export async function restoreCreditsForRefund(input: {
           id: randomUUID(),
           type: "refund_denied_completed_job",
           amount: 0,
-          polarEventId: input.polarEventId,
-          polarOrderId: input.polarOrderId ?? null,
+          paddleEventId: input.paddleEventId,
+          paddleTransactionId: input.paddleTransactionId ?? null,
           metadata: { jobId: input.jobId },
           createdAt: new Date().toISOString(),
         });
@@ -342,21 +388,21 @@ export async function restoreCreditsForRefund(input: {
         addLot(state, {
           amount: job.charged,
           source: "refund_restore",
-          polarEventId: input.polarEventId,
+          paddleEventId: input.paddleEventId,
         });
         job.status = "restored";
       } else {
         addLot(state, {
           amount: input.amount,
           source: "refund_restore",
-          polarEventId: input.polarEventId,
+          paddleEventId: input.paddleEventId,
         });
       }
     } else {
       addLot(state, {
         amount: input.amount,
         source: "refund_restore",
-        polarEventId: input.polarEventId,
+        paddleEventId: input.paddleEventId,
       });
     }
 
@@ -364,8 +410,8 @@ export async function restoreCreditsForRefund(input: {
       id: randomUUID(),
       type: "refund",
       amount: input.amount,
-      polarEventId: input.polarEventId,
-      polarOrderId: input.polarOrderId ?? null,
+      paddleEventId: input.paddleEventId,
+      paddleTransactionId: input.paddleTransactionId ?? null,
       metadata: { jobId: input.jobId ?? null },
       createdAt: new Date().toISOString(),
     });

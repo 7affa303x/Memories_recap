@@ -15,16 +15,21 @@ function numberEnv(name: string, fallback: number) {
   return Number.isFinite(n) ? n : fallback;
 }
 
-export function getPolarServer(): "sandbox" | "production" {
-  return process.env.POLAR_SERVER === "sandbox" ? "sandbox" : "production";
+export function getPaddleEnvironment(): "sandbox" | "production" {
+  const env = process.env.NEXT_PUBLIC_PADDLE_ENV || process.env.PADDLE_ENV;
+  return env === "sandbox" ? "sandbox" : "production";
 }
 
-export function getPolarAccessToken() {
-  return required("POLAR_ACCESS_TOKEN");
+export function getPaddleApiKey() {
+  return required("PADDLE_API_KEY");
 }
 
-export function getPolarWebhookSecret() {
-  return required("POLAR_WEBHOOK_SECRET");
+export function getPaddleWebhookSecret() {
+  return required("PADDLE_NOTIFICATION_WEBHOOK_SECRET");
+}
+
+export function getPaddleClientToken() {
+  return required("NEXT_PUBLIC_PADDLE_CLIENT_TOKEN");
 }
 
 export function getAppUrl() {
@@ -40,31 +45,39 @@ export const CREDIT_EXPIRY_DAYS = numberEnv("CREDIT_EXPIRY_DAYS", 90);
 export const MIN_JOB_CREDITS = numberEnv("MIN_JOB_CREDITS", 10);
 
 export const PRODUCT_CREDITS: Record<ProductKey, number> = {
-  subscription: numberEnv("POLAR_CREDITS_SUBSCRIPTION", 2000),
-  credits_small: numberEnv("POLAR_CREDITS_SMALL", 500),
-  credits_medium: numberEnv("POLAR_CREDITS_MEDIUM", 2000),
-  credits_large: numberEnv("POLAR_CREDITS_LARGE", 5000),
+  subscription: numberEnv("PADDLE_CREDITS_SUBSCRIPTION", 2000),
+  credits_small: numberEnv("PADDLE_CREDITS_SMALL", 500),
+  credits_medium: numberEnv("PADDLE_CREDITS_MEDIUM", 2000),
+  credits_large: numberEnv("PADDLE_CREDITS_LARGE", 5000),
 };
 
-export function getProductId(key: ProductKey) {
+/** Catalog USD amounts (cents) mirrored from the tested Polar catalog. */
+export const PRODUCT_USD_CENTS: Record<ProductKey, number> = {
+  subscription: 1700,
+  credits_small: 900,
+  credits_medium: 2900,
+  credits_large: 6900,
+};
+
+export function getPriceId(key: ProductKey) {
   const map: Record<ProductKey, string> = {
-    subscription: "POLAR_PRODUCT_SUBSCRIPTION",
-    credits_small: "POLAR_PRODUCT_CREDITS_SMALL",
-    credits_medium: "POLAR_PRODUCT_CREDITS_MEDIUM",
-    credits_large: "POLAR_PRODUCT_CREDITS_LARGE",
+    subscription: "PADDLE_PRICE_SUBSCRIPTION",
+    credits_small: "PADDLE_PRICE_CREDITS_SMALL",
+    credits_medium: "PADDLE_PRICE_CREDITS_MEDIUM",
+    credits_large: "PADDLE_PRICE_CREDITS_LARGE",
   };
   return required(map[key]);
 }
 
-export function productKeyFromId(productId: string): ProductKey | null {
+export function productKeyFromPriceId(priceId: string): ProductKey | null {
   const entries: Array<[ProductKey, string | undefined]> = [
-    ["subscription", process.env.POLAR_PRODUCT_SUBSCRIPTION],
-    ["credits_small", process.env.POLAR_PRODUCT_CREDITS_SMALL],
-    ["credits_medium", process.env.POLAR_PRODUCT_CREDITS_MEDIUM],
-    ["credits_large", process.env.POLAR_PRODUCT_CREDITS_LARGE],
+    ["subscription", process.env.PADDLE_PRICE_SUBSCRIPTION],
+    ["credits_small", process.env.PADDLE_PRICE_CREDITS_SMALL],
+    ["credits_medium", process.env.PADDLE_PRICE_CREDITS_MEDIUM],
+    ["credits_large", process.env.PADDLE_PRICE_CREDITS_LARGE],
   ];
   for (const [key, id] of entries) {
-    if (id && id === productId) return key;
+    if (id && id === priceId) return key;
   }
   return null;
 }
