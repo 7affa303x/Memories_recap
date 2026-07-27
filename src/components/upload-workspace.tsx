@@ -178,6 +178,15 @@ export function UploadWorkspace() {
           method: "POST",
         });
         const processJson = await processRes.json();
+        if (processRes.status === 402) {
+          throw new Error(
+            `Not enough credits${
+              processJson.creditsRequired
+                ? ` (need ${processJson.creditsRequired})`
+                : ""
+            }. Buy credits on the pricing page.`
+          );
+        }
         if (!processRes.ok) {
           throw new Error(processJson.error || "Could not start processing");
         }

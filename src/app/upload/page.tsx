@@ -10,11 +10,16 @@ export default async function UploadPage() {
     <main className="mx-auto flex min-h-full w-full max-w-lg flex-col px-6 pb-16 pt-8">
       <header className="flex items-center justify-between">
         <Logo />
-        <form action={signOutAction}>
-          <button type="submit" className="min-h-11 px-2 text-sm text-neutral-500">
-            Sign out
-          </button>
-        </form>
+        <div className="flex items-center gap-2">
+          <a href="/billing" className="min-h-11 px-2 text-sm text-neutral-500">
+            Billing
+          </a>
+          <form action={signOutAction}>
+            <button type="submit" className="min-h-11 px-2 text-sm text-neutral-500">
+              Sign out
+            </button>
+          </form>
+        </div>
       </header>
 
       <section className="mt-10">

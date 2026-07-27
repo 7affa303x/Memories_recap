@@ -1,6 +1,7 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 import { upsertUser } from "@/lib/jobs";
+import { ensureBillingUser } from "@/lib/billing/credits";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
@@ -24,8 +25,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           name: user.name ?? null,
           image: user.image ?? null,
         });
+        await ensureBillingUser(account.providerAccountId, user.email);
       } catch (error) {
-        console.error("upsertUser failed", error);
+        console.error("user/billing bootstrap failed", error);
       }
 
       return true;

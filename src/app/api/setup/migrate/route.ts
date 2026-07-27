@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { NextResponse } from "next/server";
 import { Client } from "pg";
@@ -19,8 +19,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "DATABASE_URL missing" }, { status: 500 });
   }
 
-  const sqlPath = join(process.cwd(), "supabase/migrations/20260727170000_initial.sql");
-  const sql = await readFile(sqlPath, "utf8");
+  const migrationsDir = join(process.cwd(), "supabase/migrations");
+  const files = (await readdir(migrationsDir))
+    .filter((name) => name.endsWith(".sql"))
+    .sort();
 
   const client = new Client({
     connectionString,
@@ -30,8 +32,11 @@ export async function POST(request: Request) {
 
   try {
     await client.connect();
-    await client.query(sql);
-    return NextResponse.json({ ok: true });
+    for (const file of files) {
+      const sql = await readFile(join(migrationsDir, file), "utf8");
+      await client.query(sql);
+    }
+    return NextResponse.json({ ok: true, migrations: files });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Migration failed";
     return NextResponse.json({ ok: false, error: message }, { status: 500 });

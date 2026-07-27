@@ -17,16 +17,29 @@ export default async function LandingPage({
     <main className="mx-auto flex min-h-full w-full max-w-lg flex-col px-6 pb-16 pt-8">
       <header className="flex items-center justify-between">
         <Logo />
-        {user ? (
-          <form action={signOutAction}>
-            <button
-              type="submit"
-              className="min-h-11 px-2 text-sm text-neutral-500"
-            >
-              Sign out
-            </button>
-          </form>
-        ) : null}
+        <div className="flex items-center gap-2">
+          <a href="/pricing" className="min-h-11 px-2 text-sm text-neutral-500">
+            Pricing
+          </a>
+          {user ? (
+            <>
+              <a
+                href="/billing"
+                className="min-h-11 px-2 text-sm text-neutral-500"
+              >
+                Billing
+              </a>
+              <form action={signOutAction}>
+                <button
+                  type="submit"
+                  className="min-h-11 px-2 text-sm text-neutral-500"
+                >
+                  Sign out
+                </button>
+              </form>
+            </>
+          ) : null}
+        </div>
       </header>
 
       <section className="flex flex-1 flex-col justify-center py-16">
