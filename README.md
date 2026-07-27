@@ -1,36 +1,36 @@
 # Memorys Recap
 
-تطبيق لتجميع الذكريات — مع تسجيل دخول عبر **Google OAuth** (Auth.js).
+تطبيق لتجميع الذكريات — مربوط بـ **Google OAuth** + **Supabase** + **Vercel**.
 
-## إعداد Google OAuth (مطلوب مرة واحدة)
+## المنصات
+
+| المنصة | التفاصيل |
+|---|---|
+| GitHub | `7affa303x/Memorys_recap` |
+| Vercel | Team `ALGERIA` (`algeria1`) / project `memories-recap` |
+| Supabase | Org `ALGERIA` / project ref `msxizizltsjgenkczpgs` |
+| Google OAuth | Auth.js Google provider |
+
+الأسرار تُحفظ في `.env.local` محلياً وفي Environment Variables على Vercel — **لا تُرفع إلى Git**.
+
+## إعداد Google OAuth
 
 في [Google Cloud Console](https://console.cloud.google.com/auth/clients):
 
-1. افتح عميل OAuth الذي أنشأته.
-2. أضف في **Authorized JavaScript origins**:
-   - `http://localhost:3000`
-3. أضف في **Authorized redirect URIs**:
-   - `http://localhost:3000/api/auth/callback/google`
-4. احفظ التغييرات.
+1. **Authorized JavaScript origins:** `http://localhost:3000`
+2. **Authorized redirect URIs:** `http://localhost:3000/api/auth/callback/google`
+3. أضف بريدك كـ **Test user** في OAuth consent screen.
 
-> ملاحظة: التطبيق في وضع Testing — أضف بريدك كـ Test user من شاشة OAuth consent.
+بعد نشر Vercel، أضف أيضاً دومين الإنتاج ونفس مسار الـ callback.
 
 ## المتغيرات البيئية
 
-انسخ القالب ثم املأ القيم:
-
 ```bash
 cp .env.example .env.local
+# أو: npx vercel env pull .env.local --yes --scope algeria1
 ```
 
-| المتغير | الوصف |
-|---|---|
-| `AUTH_SECRET` | سر عشوائي للجلسات |
-| `AUTH_URL` | `http://localhost:3000` محلياً |
-| `AUTH_GOOGLE_ID` | Client ID من Google |
-| `AUTH_GOOGLE_SECRET` | Client Secret من Google |
-
-لا ترفع `.env.local` إلى Git.
+المفاتيح المطلوبة: `AUTH_*` و `NEXT_PUBLIC_SUPABASE_*` و `SUPABASE_*` و `DATABASE_URL`.
 
 ## التشغيل
 
@@ -39,11 +39,13 @@ npm install
 npm run dev
 ```
 
-ثم افتح [http://localhost:3000](http://localhost:3000) واضغط **المتابعة مع Google**.
+- الصفحة: [http://localhost:3000](http://localhost:3000)
+- فحص Supabase: [http://localhost:3000/api/health/supabase](http://localhost:3000/api/health/supabase)
 
 ## المسارات
 
-- `/` — الصفحة الرئيسية + زر Google
-- `/signin` — صفحة تسجيل الدخول
-- `/dashboard` — محمية؛ تظهر بعد نجاح OAuth
-- `/api/auth/*` — مسارات Auth.js
+- `/` — الرئيسية + Google
+- `/signin` — تسجيل الدخول
+- `/dashboard` — محمية بعد OAuth
+- `/api/auth/*` — Auth.js
+- `/api/health/supabase` — فحص اتصال Supabase
