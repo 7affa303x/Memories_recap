@@ -54,6 +54,20 @@ const CATALOG = [
 ];
 
 async function createProduct(item) {
+  const body = {
+    name: item.name,
+    description: item.description,
+    price: item.price,
+    currency: "USD",
+    billing_type: item.billing_type,
+    tax_mode: "inclusive",
+    tax_category: "saas",
+  };
+  // Live API rejects billing_period on some onetime creates; only send for recurring.
+  if (item.billing_type === "recurring") {
+    body.billing_period = item.billing_period;
+  }
+
   const res = await fetch(`${base}/products`, {
     method: "POST",
     headers: {
@@ -61,16 +75,7 @@ async function createProduct(item) {
       "Content-Type": "application/json",
       "Idempotency-Key": `memory-recap-${item.key}-v1`,
     },
-    body: JSON.stringify({
-      name: item.name,
-      description: item.description,
-      price: item.price,
-      currency: "USD",
-      billing_type: item.billing_type,
-      billing_period: item.billing_period,
-      tax_mode: "inclusive",
-      tax_category: "saas",
-    }),
+    body: JSON.stringify(body),
   });
   const json = await res.json();
   if (!res.ok) throw new Error(JSON.stringify(json));
