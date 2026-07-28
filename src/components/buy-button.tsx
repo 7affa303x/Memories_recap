@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { trackClientEvent } from "@/components/analytics-pixels";
 
 export function BuyButton({
   product,
@@ -22,6 +23,7 @@ export function BuyButton({
         onClick={async () => {
           setPending(true);
           setError(null);
+          trackClientEvent("InitiateCheckout", { product });
           try {
             const res = await fetch("/api/billing/checkout", {
               method: "POST",

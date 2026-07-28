@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { STAGE_LABELS } from "@/lib/types";
 
 export const metadata: Metadata = {
-  title: "Dashboard · Memory Recap",
+  title: "Dashboard · Memories Recap",
   description: "Your past recaps and processing jobs.",
 };
 

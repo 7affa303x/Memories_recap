@@ -12,7 +12,7 @@ import { ShareControls } from "@/components/share-controls";
 type Props = { params: Promise<{ jobId: string }> };
 
 export const metadata: Metadata = {
-  title: "Your recap · Memory Recap",
+  title: "Your recap · Memories Recap",
   description: "Watch, download, and share your memory recap.",
 };
 

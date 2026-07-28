@@ -48,7 +48,7 @@ export function ShareControls({ jobId, initialShareUrl = null }: Props) {
     if (!url || !navigator.share) return;
     try {
       await navigator.share({
-        title: "Memory Recap",
+        title: "Memories Recap",
         text: "Watch this memory recap",
         url,
       });

@@ -3,9 +3,10 @@ import { getOptionalUser } from "@/lib/session";
 import { signOutAction } from "@/app/actions/auth";
 import { Button } from "@/components/ui/button";
 import { GoogleSignInButton } from "@/components/google-sign-in-button";
+import { BRAND_NAME, BRAND_TAGLINE } from "@/lib/brand";
 
 export const metadata: Metadata = {
-  title: "Memory Recap — Turn heavy videos into watchable moments",
+  title: `${BRAND_NAME} — ${BRAND_TAGLINE}`,
   description:
     "Upload memory videos. Pay for processed size. Get a calm landscape + vertical recap ready to watch and share.",
 };
@@ -23,7 +24,7 @@ export default async function LandingPage({
     <main className="min-h-full bg-[radial-gradient(1000px_520px_at_50%_-8%,#dcfce7,transparent),linear-gradient(180deg,#f8faf9_0%,#ffffff_42%,#f0fdf4_100%)]">
       <div className="mx-auto flex w-full max-w-lg flex-col px-6 pb-20 pt-8">
         <header className="flex items-center justify-between">
-          <span className="sr-only">Memory Recap</span>
+          <span className="sr-only">{BRAND_NAME}</span>
           <div className="flex items-center gap-2">
             <a href="/pricing" className="min-h-11 px-2 text-sm text-neutral-500">
               Pricing
@@ -45,7 +46,7 @@ export default async function LandingPage({
 
         <section className="pt-10">
           <h1 className="font-display text-[42px] font-semibold leading-[1.05] tracking-tight text-green-900 sm:text-[48px]">
-            Memory Recap
+            {BRAND_NAME}
           </h1>
           <p className="mt-5 text-[22px] font-medium leading-snug tracking-tight text-neutral-900">
             Turn heavy memories into watchable moments.
@@ -111,15 +112,23 @@ export default async function LandingPage({
             How it feels
           </h2>
           <div className="overflow-hidden rounded-[20px] border border-green-100 bg-neutral-900 shadow-sm">
-            <div className="aspect-video bg-[linear-gradient(135deg,#14532d_0%,#052e16_55%,#166534_100%)] p-6 text-white">
-              <p className="text-sm text-green-100/90">Demo preview</p>
-              <p className="mt-8 font-display text-3xl font-semibold leading-snug">
-                From messy camera rolls → one calm story.
-              </p>
-              <p className="mt-4 max-w-sm text-sm text-green-50/90">
-                Smart moment selection keeps order, skips black/shaky fluff, and
-                exports landscape + vertical automatically.
-              </p>
+            <div className="relative aspect-video bg-black">
+              <video
+                className="h-full w-full object-cover"
+                src="/demo/hero.mp4"
+                poster="/demo/poster.jpg"
+                autoPlay
+                muted
+                loop
+                playsInline
+                preload="metadata"
+              />
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-5">
+                <p className="text-sm text-green-100/90">Demo</p>
+                <p className="mt-1 font-display text-xl font-semibold text-white">
+                  From messy camera rolls → one calm story.
+                </p>
+              </div>
             </div>
           </div>
         </section>

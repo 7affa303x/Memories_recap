@@ -3,9 +3,9 @@ import Link from "next/link";
 import { Logo } from "@/components/logo";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy · Memory Recap",
+  title: "Privacy Policy · Memories Recap",
   description:
-    "How Memory Recap handles your videos, account data, and share links.",
+    "How Memories Recap handles your videos, account data, and share links.",
 };
 
 export default function PrivacyPage() {

@@ -243,6 +243,26 @@ export async function processJob(jobId: string, userId: string) {
     });
     logInfo("process_completed", { jobId, userId, ms: Date.now() - started });
 
+    try {
+      const { getJobForUser } = await import("@/lib/store");
+      const { sendRecapReadyEmail } = await import("@/lib/email");
+      const { getAppUrl } = await import("@/lib/billing/config");
+      const job = await getJobForUser(jobId, userId);
+      if (job?.notify_email) {
+        await sendRecapReadyEmail({
+          to: job.notify_email,
+          jobId,
+          resultUrl: `${getAppUrl()}/result/${jobId}`,
+        });
+      }
+    } catch (emailError) {
+      logError("recap_email_failed", {
+        jobId,
+        error:
+          emailError instanceof Error ? emailError.message : "email_failed",
+      });
+    }
+
     return {
       landscapeUrl: await signedRecapUrl(landscapePath),
       verticalUrl: await signedRecapUrl(verticalPath),

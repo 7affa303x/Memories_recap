@@ -11,8 +11,8 @@ import {
 import { GoogleSignInButton } from "@/components/google-sign-in-button";
 
 export const metadata: Metadata = {
-  title: "Pricing · Memory Recap",
-  description: "Simple credit pricing for Memory Recap. Pay only for processed size.",
+  title: "Pricing · Memories Recap",
+  description: "Simple credit pricing for Memories Recap. Pay only for processed size.",
 };
 
 export default async function PricingPage() {

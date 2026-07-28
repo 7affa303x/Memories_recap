@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { Button } from "@/components/ui/button";
+import { trackClientEvent } from "@/components/analytics-pixels";
 
 export function GoogleSignInButton({
   callbackUrl = "/upload",
@@ -20,6 +21,7 @@ export function GoogleSignInButton({
       disabled={pending}
       onClick={() => {
         setPending(true);
+        trackClientEvent("CompleteRegistration");
         void signIn("google", { callbackUrl }).finally(() => {
           setPending(false);
         });

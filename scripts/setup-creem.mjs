@@ -1,5 +1,5 @@
 /**
- * Provision Creem products for Memory Recap (test or live).
+ * Provision Creem products for Memories Recap (test or live).
  * Requires CREEM_API_KEY. Uses test-api when key starts with creem_test_.
  */
 import { writeFileSync } from "node:fs";
@@ -18,7 +18,7 @@ const CATALOG = [
     key: "subscription",
     name: "Pro Monthly",
     description:
-      "Monthly credits for Memory Recap. Cancel anytime. Access until period end.",
+      "Monthly credits for Memories Recap. Cancel anytime. Access until period end.",
     price: 1700,
     billing_type: "recurring",
     billing_period: "every-month",
@@ -27,7 +27,7 @@ const CATALOG = [
   {
     key: "credits_small",
     name: "Small Credit Pack",
-    description: "500 credits for Memory Recap. Valid for 90 days.",
+    description: "500 credits for Memories Recap. Valid for 90 days.",
     price: 900,
     billing_type: "onetime",
     billing_period: "once",
@@ -36,7 +36,7 @@ const CATALOG = [
   {
     key: "credits_medium",
     name: "Medium Credit Pack",
-    description: "2000 credits for Memory Recap. Valid for 90 days.",
+    description: "2000 credits for Memories Recap. Valid for 90 days.",
     price: 2900,
     billing_type: "onetime",
     billing_period: "once",
@@ -45,7 +45,7 @@ const CATALOG = [
   {
     key: "credits_large",
     name: "Large Credit Pack",
-    description: "5000 credits for Memory Recap. Valid for 90 days.",
+    description: "5000 credits for Memories Recap. Valid for 90 days.",
     price: 6900,
     billing_type: "onetime",
     billing_period: "once",

@@ -1,4 +1,4 @@
--- Memory Recap initial schema
+-- Memories Recap initial schema
 -- Apply via /api/setup/migrate or Supabase SQL editor
 
 create extension if not exists "pgcrypto";

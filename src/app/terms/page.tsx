@@ -3,8 +3,8 @@ import Link from "next/link";
 import { Logo } from "@/components/logo";
 
 export const metadata: Metadata = {
-  title: "Terms of Service · Memory Recap",
-  description: "Terms for using Memory Recap.",
+  title: "Terms of Service · Memories Recap",
+  description: "Terms for using Memories Recap.",
 };
 
 export default function TermsPage() {
@@ -26,7 +26,7 @@ export default function TermsPage() {
         <section className="space-y-2">
           <h2 className="text-lg font-medium text-neutral-900">Service</h2>
           <p>
-            Memory Recap turns uploaded memory videos into short landscape and
+            Memories Recap turns uploaded memory videos into short landscape and
             vertical recaps. It is not a full video editor. Results depend on
             source quality and automated selection.
           </p>

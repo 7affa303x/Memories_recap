@@ -3,6 +3,8 @@ import { Fraunces, Manrope } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 import { AuthProvider } from "@/components/auth-provider";
+import { AnalyticsPixels } from "@/components/analytics-pixels";
+import { BRAND_NAME, BRAND_TAGLINE, BRAND_SHORT } from "@/lib/brand";
 
 const manrope = Manrope({
   subsets: ["latin"],
@@ -26,21 +28,20 @@ const appUrl =
 export const metadata: Metadata = {
   metadataBase: new URL(appUrl.replace(/\/$/, "")),
   title: {
-    default: "Memory Recap",
-    template: "%s · Memory Recap",
+    default: BRAND_NAME,
+    template: `%s · ${BRAND_NAME}`,
   },
-  description:
-    "Upload heavy memory videos, pay with credits, and get a calm landscape + vertical recap ready to watch and share.",
+  description: BRAND_SHORT,
   openGraph: {
-    title: "Memory Recap",
+    title: BRAND_NAME,
     description: "Upload → pay → wait → receive a beautiful recap.",
     type: "website",
-    siteName: "Memory Recap",
+    siteName: BRAND_NAME,
   },
   twitter: {
     card: "summary_large_image",
-    title: "Memory Recap",
-    description: "Turn heavy memories into watchable moments.",
+    title: BRAND_NAME,
+    description: BRAND_TAGLINE,
   },
   robots: {
     index: true,
@@ -62,7 +63,10 @@ export default function RootLayout({
   return (
     <html lang="en" className={cn("h-full", manrope.variable, fraunces.variable)}>
       <body className="min-h-full bg-white font-sans text-neutral-900">
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <AnalyticsPixels />
+          {children}
+        </AuthProvider>
       </body>
     </html>
   );

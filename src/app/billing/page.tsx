@@ -5,10 +5,11 @@ import { Logo } from "@/components/logo";
 import { getBillingSummary } from "@/lib/billing/credits";
 import { Button } from "@/components/ui/button";
 import { FREE_CREDITS } from "@/lib/billing/config";
+import { CheckoutSuccessBeacon } from "@/components/checkout-success-beacon";
 
 export const metadata: Metadata = {
   title: "Billing",
-  description: "Credits, subscription, and payment history for Memory Recap.",
+  description: "Credits, subscription, and payment history for Memories Recap.",
 };
 
 function humanSubscription(

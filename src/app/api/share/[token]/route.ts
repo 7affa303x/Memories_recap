@@ -51,7 +51,7 @@ export async function GET(request: Request, { params }: Params) {
     : null;
 
   return NextResponse.json({
-    title: job.title || "Memory Recap",
+    title: job.title || "Memories Recap",
     expiresAt: share.expires_at,
     landscapeUrl,
     verticalUrl,

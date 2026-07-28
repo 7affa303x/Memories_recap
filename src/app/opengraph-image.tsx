@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "Memory Recap — Turn heavy memories into watchable moments";
+export const alt = "Memories Recap — Turn heavy memories into watchable moments";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -29,7 +29,7 @@ export default function OpenGraphImage() {
             letterSpacing: -0.5,
           }}
         >
-          Memory Recap
+          Memories Recap
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
           <div

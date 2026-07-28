@@ -1,4 +1,4 @@
-# Memory Recap
+# Memories Recap
 
 Turn heavy memories into watchable moments.
 
@@ -13,9 +13,13 @@ Google sign-in only. Original videos stay untouched by default.
 - Next.js App Router + TypeScript + Tailwind + shadcn/ui
 - Auth.js (Google OAuth)
 - Supabase private Storage (`memories`, `app-data`, `recaps`)
-- Creem Merchant of Record billing
+- Creem Merchant of Record billing (live)
 - FFmpeg + optional Gemini/Groq/OpenAI vision scoring
 - Vercel
+
+## Live site
+
+https://memories-recap-one.vercel.app
 
 ## Billing (Creem)
 
@@ -26,20 +30,11 @@ Pages:
 Webhook:
 - `POST /api/webhooks/creem` (signed only)
 
-Catalog (USD):
-- Pro Monthly — $17 / 2000 credits
-- Small pack — $9 / 500 credits
-- Medium pack — $29 / 2000 credits
-- Large pack — $69 / 5000 credits
+## Optional env
 
-## Vision AI
-
-Set any of:
-- `GEMINI_API_KEY` (preferred)
-- `GROQ_API_KEY`
-- `OPENAI_API_KEY` / `AI_GATEWAY_API_KEY`
-
-Without keys, local FFmpeg scene + brightness scoring still runs.
+- `RESEND_API_KEY` — email when recap is ready
+- `NEXT_PUBLIC_META_PIXEL_ID` / `NEXT_PUBLIC_TIKTOK_PIXEL_ID` — ads pixels
+- `GEMINI_API_KEY` / `GROQ_API_KEY` — vision scoring
 
 ## Setup
 
@@ -50,9 +45,3 @@ npm run dev
 ```
 
 Health check: `GET /api/health`
-
-## Deploy
-
-```bash
-npx vercel --prod --scope algeria1
-```

@@ -15,7 +15,7 @@ function notifyRecapReady() {
     if (!("Notification" in window)) return;
     if (typeof Notification !== "function") return;
     if (Notification.permission !== "granted") return;
-    new Notification("Memory Recap is ready", {
+    new Notification("Memories Recap is ready", {
       body: "Your recap finished processing.",
     });
   } catch {

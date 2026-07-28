@@ -1,4 +1,4 @@
--- Memory Recap billing schema (Polar + credits)
+-- Memories Recap billing schema (Polar + credits)
 create extension if not exists "pgcrypto";
 
 create table if not exists public.billing_users (
