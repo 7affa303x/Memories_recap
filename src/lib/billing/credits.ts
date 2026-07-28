@@ -139,6 +139,18 @@ async function mutate(
         { contentType: "application/json", upsert: false }
       );
       if (lock.error) {
+        // Break stale locks older than 15s so grants/pages don't soft-fail forever
+        const stale = await supabase.storage.from(BUCKET).download(lockPath);
+        if (stale.data) {
+          try {
+            const meta = JSON.parse(await stale.data.text()) as { at?: number };
+            if (!meta.at || Date.now() - meta.at > 15_000) {
+              await supabase.storage.from(BUCKET).remove([lockPath]);
+            }
+          } catch {
+            await supabase.storage.from(BUCKET).remove([lockPath]);
+          }
+        }
         await new Promise((r) => setTimeout(r, 50 + attempt * 40));
         continue;
       }
