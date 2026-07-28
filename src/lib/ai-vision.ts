@@ -21,7 +21,7 @@ async function scoreWithGemini(b64: string, mime = "image/jpeg") {
   const key = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY;
   if (!key) return null;
   const model =
-    process.env.GEMINI_VISION_MODEL || "gemini-2.0-flash";
+    process.env.GEMINI_VISION_MODEL || "gemini-flash-lite-latest";
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`;
   const res = await fetch(url, {
     method: "POST",
