@@ -1,20 +1,36 @@
 import { NextResponse } from "next/server";
 import { after } from "next/server";
 import { auth } from "@/auth";
-import { getJobForUser, listUploads, updateJob } from "@/lib/jobs";
+import {
+  enqueueJob,
+  getJobForUser,
+  listUploads,
+  updateJob,
+} from "@/lib/jobs";
 import { processJob } from "@/lib/process-job";
 import {
   deductCreditsForJob,
   finalizeJobCredits,
 } from "@/lib/billing/credits";
 import { creditsForBytes } from "@/lib/billing/config";
+import { clientKey, rateLimit } from "@/lib/rate-limit";
+import { logError } from "@/lib/logger";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
 type Params = { params: Promise<{ jobId: string }> };
 
-export async function POST(_request: Request, { params }: Params) {
+export async function POST(request: Request, { params }: Params) {
+  const rl = rateLimit({
+    key: `process:${clientKey(request)}`,
+    limit: 20,
+    windowMs: 60_000,
+  });
+  if (!rl.ok) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
+
   const session = await auth();
   if (!session?.user?.id || !session.user.email) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -33,6 +49,7 @@ export async function POST(_request: Request, { params }: Params) {
   }
 
   if (
+    job.status === "queued" ||
     job.status === "analyzing" ||
     job.status === "selecting" ||
     job.status === "building" ||
@@ -51,13 +68,19 @@ export async function POST(_request: Request, { params }: Params) {
   }
 
   const amount = creditsForBytes(job.total_bytes || 0);
+
+  // Retry after failure: credits already reserved/restored flow — deduct is idempotent per jobId
   try {
     await deductCreditsForJob({ userId, email, jobId, amount });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Billing error";
     if (message === "insufficient_credits") {
       return NextResponse.json(
-        { error: "Not enough credits", creditsRequired: amount },
+        {
+          error: "Not enough credits",
+          creditsRequired: amount,
+          balanceHint: "Buy credits on the pricing page, then retry.",
+        },
         { status: 402 }
       );
     }
@@ -65,14 +88,21 @@ export async function POST(_request: Request, { params }: Params) {
   }
 
   await updateJob(jobId, userId, {
-    status: "analyzing",
-    stage: "analyzing",
-    progress: 5,
+    status: "queued",
+    stage: "queued",
+    progress: 3,
     error: null,
+    credits_charged: amount,
   });
+  await enqueueJob(jobId, userId);
 
   after(async () => {
     try {
+      await updateJob(jobId, userId, {
+        status: "analyzing",
+        stage: "analyzing",
+        progress: 5,
+      });
       await processJob(jobId, userId);
       await finalizeJobCredits({
         userId,
@@ -81,7 +111,11 @@ export async function POST(_request: Request, { params }: Params) {
         outcome: "consumed",
       });
     } catch (error) {
-      console.error("processJob failed", error);
+      logError("processJob failed", {
+        jobId,
+        userId,
+        error: error instanceof Error ? error.message : "unknown",
+      });
       try {
         await finalizeJobCredits({
           userId,
@@ -90,14 +124,18 @@ export async function POST(_request: Request, { params }: Params) {
           outcome: "restored",
         });
       } catch (restoreError) {
-        console.error("credit restore failed", restoreError);
+        logError("credit restore failed", {
+          jobId,
+          error:
+            restoreError instanceof Error ? restoreError.message : "unknown",
+        });
       }
     }
   });
 
   return NextResponse.json({
     ok: true,
-    status: "analyzing",
+    status: "queued",
     creditsCharged: amount,
   });
 }

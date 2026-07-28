@@ -19,8 +19,30 @@ export function getServiceSupabase() {
   return admin;
 }
 
+/** @deprecated prefer signedRecapUrl — outputs are private by default */
 export function publicRecapUrl(path: string) {
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
   if (!base) throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL");
   return `${base}/storage/v1/object/public/recaps/${path}`;
+}
+
+export async function signedRecapUrl(
+  path: string,
+  expiresInSeconds = 60 * 60 * 6
+) {
+  const supabase = getServiceSupabase();
+  // Prefer private outputs in memories bucket; fall back to recaps.
+  const primary = await supabase.storage
+    .from("memories")
+    .createSignedUrl(path, expiresInSeconds);
+  if (!primary.error && primary.data?.signedUrl) {
+    return primary.data.signedUrl;
+  }
+  const secondary = await supabase.storage
+    .from("recaps")
+    .createSignedUrl(path, expiresInSeconds);
+  if (secondary.error || !secondary.data?.signedUrl) {
+    throw new Error(secondary.error?.message || primary.error?.message || "Signed URL failed");
+  }
+  return secondary.data.signedUrl;
 }

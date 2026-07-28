@@ -1,25 +1,57 @@
 import type { Metadata, Viewport } from "next";
-import { Roboto } from "next/font/google";
+import { Fraunces, Manrope } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 import { AuthProvider } from "@/components/auth-provider";
 
-const roboto = Roboto({
+const manrope = Manrope({
   subsets: ["latin"],
-  weight: ["400", "500", "700"],
-  variable: "--font-roboto",
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-manrope",
   display: "swap",
 });
 
+const fraunces = Fraunces({
+  subsets: ["latin"],
+  weight: ["500", "600", "700"],
+  variable: "--font-fraunces",
+  display: "swap",
+});
+
+const appUrl =
+  process.env.NEXT_PUBLIC_APP_URL ||
+  process.env.AUTH_URL ||
+  "https://memories-recap-one.vercel.app";
+
 export const metadata: Metadata = {
-  title: "Memory Recap",
-  description: "Turn heavy memories into watchable moments.",
+  metadataBase: new URL(appUrl.replace(/\/$/, "")),
+  title: {
+    default: "Memory Recap",
+    template: "%s · Memory Recap",
+  },
+  description:
+    "Upload heavy memory videos, pay with credits, and get a calm landscape + vertical recap ready to watch and share.",
+  openGraph: {
+    title: "Memory Recap",
+    description: "Upload → pay → wait → receive a beautiful recap.",
+    type: "website",
+    siteName: "Memory Recap",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Memory Recap",
+    description: "Turn heavy memories into watchable moments.",
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#ffffff",
+  themeColor: "#ecfdf5",
 };
 
 export default function RootLayout({
@@ -28,7 +60,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={cn("h-full", roboto.variable)}>
+    <html lang="en" className={cn("h-full", manrope.variable, fraunces.variable)}>
       <body className="min-h-full bg-white font-sans text-neutral-900">
         <AuthProvider>{children}</AuthProvider>
       </body>

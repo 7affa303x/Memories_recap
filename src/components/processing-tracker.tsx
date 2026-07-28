@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Progress } from "@/components/ui/progress";
-import { STAGE_LABELS, type JobRow } from "@/lib/types";
+import { Button } from "@/components/ui/button";
+import { STAGE_LABELS, formatEta, type JobRow } from "@/lib/types";
 
 const STAGES = ["analyzing", "selecting", "building", "rendering"] as const;
 
@@ -17,7 +19,7 @@ function notifyRecapReady() {
       body: "Your recap finished processing.",
     });
   } catch {
-    // Some mobile browsers disallow `new Notification()` outside a service worker.
+    // ignore
   }
 }
 
@@ -25,6 +27,7 @@ export function ProcessingTracker({ jobId }: { jobId: string }) {
   const router = useRouter();
   const [job, setJob] = useState<JobRow | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -48,7 +51,7 @@ export function ProcessingTracker({ jobId }: { jobId: string }) {
         }
 
         if (nextJob.status === "failed") {
-          setError(nextJob.error || "Processing failed");
+          setError(nextJob.error || "Processing failed. Credits were restored.");
           return;
         }
 
@@ -62,13 +65,12 @@ export function ProcessingTracker({ jobId }: { jobId: string }) {
     }
 
     tick();
-
     try {
       if ("Notification" in window && Notification.permission === "default") {
         void Notification.requestPermission();
       }
     } catch {
-      // Ignore unsupported notification permission flows.
+      // ignore
     }
 
     return () => {
@@ -77,9 +79,29 @@ export function ProcessingTracker({ jobId }: { jobId: string }) {
     };
   }, [jobId, router]);
 
+  async function retry() {
+    setRetrying(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/jobs/${jobId}/process`, { method: "POST" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Retry failed");
+      setJob((current) =>
+        current
+          ? { ...current, status: "queued", stage: "queued", progress: 3, error: null }
+          : current
+      );
+      // resume polling via remount-ish: reset by location reload
+      window.location.reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Retry failed");
+      setRetrying(false);
+    }
+  }
+
   const progress = job?.progress ?? 5;
   const stage = job?.stage || job?.status || "analyzing";
-  const eta = job?.eta_seconds;
+  const failed = job?.status === "failed" || Boolean(error && job?.status === "failed");
 
   return (
     <div className="mt-10 space-y-8">
@@ -88,17 +110,17 @@ export function ProcessingTracker({ jobId }: { jobId: string }) {
         <h1 className="mt-2 text-2xl font-medium tracking-tight">
           {STAGE_LABELS[stage] || "Processing"}
         </h1>
+        <p className="mt-2 text-sm text-neutral-500">
+          Keep this tab open for live progress. You can also return later from
+          your dashboard.
+        </p>
       </div>
 
       <div className="rounded-[16px] bg-neutral-50 p-5 shadow-sm">
         <Progress value={progress} className="h-2" />
         <div className="mt-4 flex items-center justify-between text-sm text-neutral-500">
           <span>{progress}%</span>
-          <span>
-            {typeof eta === "number" && eta > 0
-              ? `About ${Math.max(1, Math.ceil(eta / 60))} min left`
-              : "Finishing up"}
-          </span>
+          <span>{formatEta(job?.eta_seconds)}</span>
         </div>
       </div>
 
@@ -129,12 +151,25 @@ export function ProcessingTracker({ jobId }: { jobId: string }) {
         })}
       </ol>
 
-      <p className="text-sm text-neutral-500">
-        You can close this page. Processing continues, and we will notify you
-        when it is finished.
-      </p>
-
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      {failed ? (
+        <div className="space-y-3 rounded-[16px] bg-red-50 p-4">
+          <p className="text-sm text-red-700">
+            {error || "Processing failed. If this was a system error, credits were restored."}
+          </p>
+          <div className="grid gap-3">
+            <Button
+              className="h-12 rounded-[16px]"
+              onClick={retry}
+              disabled={retrying}
+            >
+              {retrying ? "Retrying…" : "Retry processing"}
+            </Button>
+            <Button asChild variant="secondary" className="h-12 rounded-[16px]">
+              <Link href="/dashboard">Back to dashboard</Link>
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -1,16 +1,22 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { estimateProcessingSeconds, formatBytes } from "@/lib/types";
+import {
+  estimateProcessingSeconds,
+  formatBytes,
+  MAX_FILES_PER_JOB,
+} from "@/lib/types";
 
 type LocalFile = {
   id: string;
   file: File;
   progress: number;
   status: "queued" | "uploading" | "done" | "error";
+  uploadId?: string;
   error?: string;
 };
 
@@ -18,29 +24,26 @@ function createId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-async function uploadWithResume(
+async function uploadWithProgress(
   file: File,
   signedUrl: string,
   onProgress: (pct: number) => void
 ) {
-  const key = `upload-done:${file.name}:${file.size}:${file.lastModified}:${signedUrl}`;
-  if (sessionStorage.getItem(key) === "1") {
-    onProgress(100);
-    return;
-  }
-
+  const resumeKey = `upload-bytes:${file.name}:${file.size}:${file.lastModified}`;
   await new Promise<void>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", signedUrl);
     xhr.setRequestHeader("Content-Type", file.type || "video/mp4");
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable) {
-        onProgress(Math.round((event.loaded / event.total) * 100));
+        const pct = Math.round((event.loaded / event.total) * 100);
+        onProgress(pct);
+        sessionStorage.setItem(resumeKey, String(event.loaded));
       }
     };
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
-        sessionStorage.setItem(key, "1");
+        sessionStorage.setItem(`${resumeKey}:done`, "1");
         onProgress(100);
         resolve();
       } else {
@@ -52,26 +55,45 @@ async function uploadWithResume(
   });
 }
 
-export function UploadWorkspace() {
+export function UploadWorkspace({
+  initialBalance,
+}: {
+  initialBalance: number;
+}) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<LocalFile[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [balance, setBalance] = useState(initialBalance);
   const [isPending, startTransition] = useTransition();
+
+  useEffect(() => {
+    fetch("/api/billing/credits")
+      .then((r) => r.json())
+      .then((j) => {
+        if (typeof j.balance === "number") setBalance(j.balance);
+      })
+      .catch(() => undefined);
+  }, []);
 
   const totals = useMemo(() => {
     const count = files.length;
     const bytes = files.reduce((sum, item) => sum + item.file.size, 0);
+    const creditsRequired = Math.max(10, Math.ceil(bytes / (1024 * 1024)));
     return {
       count,
       bytes,
       estimate: estimateProcessingSeconds(bytes, count || 1),
+      creditsRequired,
+      enough: balance >= creditsRequired,
     };
-  }, [files]);
+  }, [files, balance]);
 
   const addFiles = useCallback((list: FileList | File[]) => {
-    const incoming = Array.from(list).filter((file) => file.type.startsWith("video/"));
+    const incoming = Array.from(list).filter((file) =>
+      file.type.startsWith("video/")
+    );
     if (incoming.length === 0) {
       setError("Please choose video files.");
       return;
@@ -95,7 +117,7 @@ export function UploadWorkspace() {
           });
         }
       }
-      return next.slice(0, 20);
+      return next.slice(0, MAX_FILES_PER_JOB);
     });
   }, []);
 
@@ -108,9 +130,14 @@ export function UploadWorkspace() {
       setError("Add at least one video.");
       return;
     }
+    if (!totals.enough) {
+      setError(
+        `Not enough credits. Need ${totals.creditsRequired}, you have ${balance}.`
+      );
+      return;
+    }
 
     setError(null);
-
     startTransition(async () => {
       try {
         const createRes = await fetch("/api/jobs", {
@@ -148,6 +175,7 @@ export function UploadWorkspace() {
               size: item.file.size,
               type: item.file.type,
               sortOrder: index,
+              resumeUploadId: item.uploadId,
             }),
           });
           const metaJson = await metaRes.json();
@@ -155,15 +183,25 @@ export function UploadWorkspace() {
             throw new Error(metaJson.error || "Could not prepare upload");
           }
 
-          await uploadWithResume(item.file, metaJson.signedUrl, (pct) => {
-            setFiles((current) =>
-              current.map((entry) =>
-                entry.id === item.id
-                  ? { ...entry, progress: pct, status: "uploading" }
-                  : entry
-              )
-            );
-          });
+          setFiles((current) =>
+            current.map((entry) =>
+              entry.id === item.id
+                ? { ...entry, uploadId: metaJson.upload?.id }
+                : entry
+            )
+          );
+
+          if (!metaJson.alreadyUploaded) {
+            await uploadWithProgress(item.file, metaJson.signedUrl, (pct) => {
+              setFiles((current) =>
+                current.map((entry) =>
+                  entry.id === item.id
+                    ? { ...entry, progress: pct, status: "uploading" }
+                    : entry
+                )
+              );
+            });
+          }
 
           setFiles((current) =>
             current.map((entry) =>
@@ -180,11 +218,7 @@ export function UploadWorkspace() {
         const processJson = await processRes.json();
         if (processRes.status === 402) {
           throw new Error(
-            `Not enough credits${
-              processJson.creditsRequired
-                ? ` (need ${processJson.creditsRequired})`
-                : ""
-            }. Buy credits on the pricing page.`
+            `Not enough credits (need ${processJson.creditsRequired}). Buy credits first.`
           );
         }
         if (!processRes.ok) {
@@ -200,6 +234,19 @@ export function UploadWorkspace() {
 
   return (
     <div className="space-y-6">
+      <div className="rounded-[16px] bg-neutral-50 p-4 text-sm shadow-sm">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-neutral-500">Your credits</span>
+          <span className="font-medium">{balance}</span>
+        </div>
+        <p className="mt-2 text-neutral-500">
+          1 credit ≈ 1 MB processed (min 10).{" "}
+          <Link href="/pricing" className="text-green-700 underline">
+            Buy credits
+          </Link>
+        </p>
+      </div>
+
       <button
         type="button"
         onDragEnter={(e) => {
@@ -229,12 +276,15 @@ export function UploadWorkspace() {
         <p className="text-base font-medium text-neutral-900">
           Drag and drop videos
         </p>
-        <p className="mt-2 text-sm text-neutral-500">or tap to select files</p>
+        <p className="mt-2 text-sm text-neutral-500">
+          or tap to select · up to {MAX_FILES_PER_JOB} files · 2 GB total
+        </p>
         <input
           ref={inputRef}
           type="file"
           accept="video/*"
           multiple
+          capture="environment"
           className="hidden"
           onChange={(e) => {
             if (e.target.files?.length) addFiles(e.target.files);
@@ -245,20 +295,32 @@ export function UploadWorkspace() {
 
       {files.length > 0 ? (
         <div className="rounded-[16px] bg-neutral-50 p-4 shadow-sm">
-          <div className="grid grid-cols-3 gap-3 text-sm">
+          <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
             <div>
               <p className="text-neutral-500">Videos</p>
               <p className="mt-1 font-medium">{totals.count}</p>
             </div>
             <div>
-              <p className="text-neutral-500">Total size</p>
+              <p className="text-neutral-500">Size</p>
               <p className="mt-1 font-medium">{formatBytes(totals.bytes)}</p>
             </div>
             <div>
-              <p className="text-neutral-500">Estimated</p>
-              <p className="mt-1 font-medium">~{Math.ceil(totals.estimate / 60)} min</p>
+              <p className="text-neutral-500">Credits</p>
+              <p className="mt-1 font-medium">{totals.creditsRequired}</p>
+            </div>
+            <div>
+              <p className="text-neutral-500">Est. time</p>
+              <p className="mt-1 font-medium">
+                ~{Math.ceil(totals.estimate / 60)} min
+              </p>
             </div>
           </div>
+          {!totals.enough ? (
+            <p className="mt-3 text-sm text-amber-700">
+              You need {totals.creditsRequired - balance} more credits before
+              processing.
+            </p>
+          ) : null}
         </div>
       ) : null}
 
@@ -273,6 +335,11 @@ export function UploadWorkspace() {
                 <p className="truncate text-sm font-medium">{item.file.name}</p>
                 <p className="mt-1 text-sm text-neutral-500">
                   {formatBytes(item.file.size)}
+                  {item.status === "uploading"
+                    ? ` · ${item.progress}%`
+                    : item.status === "done"
+                      ? " · uploaded"
+                      : ""}
                 </p>
               </div>
               <button
@@ -304,8 +371,17 @@ export function UploadWorkspace() {
         disabled={isPending || files.length === 0}
         onClick={startUpload}
       >
-        {isPending ? "Uploading…" : "Create recap"}
+        {isPending
+          ? "Uploading…"
+          : totals.enough
+            ? `Create recap · ${totals.creditsRequired} credits`
+            : "Buy credits to continue"}
       </Button>
+      {!totals.enough && files.length > 0 ? (
+        <Button asChild variant="secondary" className="h-12 w-full rounded-[16px]">
+          <Link href="/pricing">Go to pricing</Link>
+        </Button>
+      ) : null}
     </div>
   );
 }

@@ -4,7 +4,7 @@ export function Logo({ href = "/" }: { href?: string }) {
   return (
     <Link
       href={href}
-      className="text-[18px] font-medium tracking-tight text-neutral-900"
+      className="font-display text-[20px] font-semibold tracking-tight text-green-900"
     >
       Memory Recap
     </Link>

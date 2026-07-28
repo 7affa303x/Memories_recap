@@ -48,6 +48,14 @@ export const PRODUCT_CREDITS: Record<ProductKey, number> = {
   credits_large: numberEnv("CREEM_CREDITS_LARGE", 5000),
 };
 
+/** Display prices in USD (mirrors Creem catalog). */
+export const PRODUCT_USD: Record<ProductKey, number> = {
+  subscription: 17,
+  credits_small: 9,
+  credits_medium: 29,
+  credits_large: 69,
+};
+
 export function getProductId(key: ProductKey) {
   const map: Record<ProductKey, string> = {
     subscription: "CREEM_PRODUCT_SUBSCRIPTION",

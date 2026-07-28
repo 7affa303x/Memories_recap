@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getJobForUser, getRecap, listUploads } from "@/lib/jobs";
-import { publicRecapUrl } from "@/lib/supabase/admin";
+import { signedRecapUrl } from "@/lib/supabase/admin";
 
 type Params = { params: Promise<{ jobId: string }> };
 
@@ -20,18 +20,31 @@ export async function GET(_request: Request, { params }: Params) {
   const uploads = await listUploads(jobId, session.user.id);
   const recap = await getRecap(jobId, session.user.id);
 
+  let landscapeUrl: string | null = null;
+  let verticalUrl: string | null = null;
+  if (recap?.landscape_path) {
+    try {
+      landscapeUrl = await signedRecapUrl(recap.landscape_path);
+    } catch {
+      landscapeUrl = null;
+    }
+  }
+  if (recap?.vertical_path) {
+    try {
+      verticalUrl = await signedRecapUrl(recap.vertical_path);
+    } catch {
+      verticalUrl = null;
+    }
+  }
+
   return NextResponse.json({
     job,
     uploads,
     recap: recap
       ? {
           ...recap,
-          landscapeUrl: recap.landscape_path
-            ? publicRecapUrl(recap.landscape_path)
-            : null,
-          verticalUrl: recap.vertical_path
-            ? publicRecapUrl(recap.vertical_path)
-            : null,
+          landscapeUrl,
+          verticalUrl,
         }
       : null,
   });

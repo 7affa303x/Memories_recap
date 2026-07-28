@@ -1,8 +1,51 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { requireUser } from "@/lib/session";
 import { Logo } from "@/components/logo";
 import { getBillingSummary } from "@/lib/billing/credits";
 import { Button } from "@/components/ui/button";
+import { FREE_CREDITS } from "@/lib/billing/config";
+
+export const metadata: Metadata = {
+  title: "Billing",
+  description: "Credits, subscription, and payment history for Memory Recap.",
+};
+
+function humanSubscription(
+  summary: Awaited<ReturnType<typeof getBillingSummary>>
+) {
+  const sub = summary.subscription;
+  if (!sub) {
+    return {
+      title: "Pay as you go",
+      detail: `No monthly plan. You have ${summary.balance} credits ready to use.`,
+    };
+  }
+  if (sub.status === "active" && sub.cancelAtPeriodEnd) {
+    return {
+      title: "Pro monthly — ending soon",
+      detail: `Your plan stays active until ${
+        sub.currentPeriodEnd
+          ? new Date(sub.currentPeriodEnd).toLocaleDateString()
+          : "period end"
+      }. You keep credits until then.`,
+    };
+  }
+  if (sub.status === "active") {
+    return {
+      title: "Pro monthly — active",
+      detail: `Renews ${
+        sub.currentPeriodEnd
+          ? new Date(sub.currentPeriodEnd).toLocaleDateString()
+          : "monthly"
+      }. Manage card or cancel in the billing portal.`,
+    };
+  }
+  return {
+    title: `Subscription · ${sub.status}`,
+    detail: "Open the billing portal to review or restart your plan.",
+  };
+}
 
 export default async function BillingPage({
   searchParams,
@@ -12,13 +55,14 @@ export default async function BillingPage({
   const user = await requireUser();
   const params = await searchParams;
   const summary = await getBillingSummary(user.id, user.email);
+  const plan = humanSubscription(summary);
 
   return (
     <main className="mx-auto flex min-h-full w-full max-w-lg flex-col px-6 pb-16 pt-8">
       <header className="flex items-center justify-between">
         <Logo />
         <Link href="/pricing" className="min-h-11 px-2 text-sm text-neutral-500">
-          Pricing
+          Buy credits
         </Link>
       </header>
 
@@ -26,79 +70,70 @@ export default async function BillingPage({
         <div>
           <h1 className="text-2xl font-medium tracking-tight">Billing</h1>
           <p className="mt-2 text-neutral-500">
-            Credits, subscription, and invoices.
+            Plain-language view of your balance and plan.
           </p>
         </div>
 
         {params.checkout === "success" ? (
           <p className="rounded-[16px] bg-green-50 px-4 py-3 text-sm text-green-800">
-            Payment received. Credits appear after webhook confirmation.
+            Payment received. Credits usually appear within a few seconds after
+            webhook confirmation.
           </p>
         ) : null}
 
         {params.portal === "missing" ? (
           <p className="rounded-[16px] bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            No Creem customer yet. Complete a purchase first to open the portal.
+            No customer record yet. Complete a purchase first to open the portal.
           </p>
         ) : null}
 
         <div className="rounded-[16px] bg-neutral-50 p-5 shadow-sm">
-          <p className="text-sm text-neutral-500">Current credits</p>
+          <p className="text-sm text-neutral-500">Available credits</p>
           <p className="mt-2 text-3xl font-medium">{summary.balance}</p>
           <p className="mt-2 text-sm text-neutral-500">
-            Free grant used: {summary.freeGranted ? "yes" : "no"}
+            {summary.balance === 0
+              ? "Buy a pack to process videos. About 1 credit ≈ 1 MB."
+              : `Enough for roughly ${summary.balance} MB of processing (min 10 per job).`}
+          </p>
+          <p className="mt-2 text-sm text-neutral-500">
+            Free starter grant:{" "}
+            {summary.freeGranted
+              ? `already used (${FREE_CREDITS} credits)`
+              : "available on first sign-in"}
           </p>
         </div>
 
         <div className="rounded-[16px] bg-neutral-50 p-5 shadow-sm">
-          <p className="text-sm text-neutral-500">Subscription</p>
-          {summary.subscription ? (
-            <div className="mt-2 space-y-1 text-sm">
-              <p className="font-medium capitalize">{summary.subscription.status}</p>
-              <p className="text-neutral-500">
-                Renewal:{" "}
-                {summary.subscription.currentPeriodEnd
-                  ? new Date(
-                      summary.subscription.currentPeriodEnd
-                    ).toLocaleDateString()
-                  : "—"}
-              </p>
-              {summary.subscription.cancelAtPeriodEnd ? (
-                <p className="text-neutral-500">
-                  Cancels at period end. Access remains until then.
-                </p>
-              ) : null}
-            </div>
-          ) : (
-            <p className="mt-2 text-sm text-neutral-500">No active subscription</p>
-          )}
+          <p className="text-sm text-neutral-500">Plan</p>
+          <p className="mt-2 text-lg font-medium">{plan.title}</p>
+          <p className="mt-2 text-sm text-neutral-500">{plan.detail}</p>
         </div>
 
         <div className="grid gap-3">
           <Button asChild className="h-12 rounded-[16px] text-base">
-            <a href="/api/billing/portal">Billing portal</a>
+            <Link href="/pricing">Buy credits</Link>
           </Button>
           <Button
             asChild
             variant="secondary"
             className="h-12 rounded-[16px] bg-white text-base shadow-sm"
           >
-            <Link href="/pricing">Buy credits</Link>
+            <a href="/api/billing/portal">Open billing portal</a>
           </Button>
           <Button
             asChild
             variant="ghost"
             className="h-12 rounded-[16px] text-base text-neutral-600"
           >
-            <Link href="/upload">Back to upload</Link>
+            <Link href="/dashboard">Back to dashboard</Link>
           </Button>
         </div>
 
         <div>
-          <h2 className="text-lg font-medium">Invoices & transactions</h2>
+          <h2 className="text-lg font-medium">Recent activity</h2>
           <ul className="mt-4 space-y-3">
             {summary.transactions.length === 0 ? (
-              <li className="text-sm text-neutral-500">No transactions yet</li>
+              <li className="text-sm text-neutral-500">No purchases yet</li>
             ) : (
               summary.transactions.map((tx) => (
                 <li
@@ -106,7 +141,7 @@ export default async function BillingPage({
                   className="rounded-[16px] bg-neutral-50 px-4 py-3 text-sm shadow-sm"
                 >
                   <div className="flex items-center justify-between gap-3">
-                    <span className="font-medium">{tx.type}</span>
+                    <span className="font-medium">{tx.type.replace(/_/g, " ")}</span>
                     <span>{tx.amount > 0 ? `+${tx.amount}` : tx.amount}</span>
                   </div>
                   <p className="mt-1 text-neutral-500">

@@ -1,9 +1,19 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { getOptionalUser } from "@/lib/session";
 import { Logo } from "@/components/logo";
 import { BuyButton } from "@/components/buy-button";
-import { FREE_CREDITS, PRODUCT_CREDITS } from "@/lib/billing/config";
+import {
+  FREE_CREDITS,
+  PRODUCT_CREDITS,
+  PRODUCT_USD,
+} from "@/lib/billing/config";
 import { GoogleSignInButton } from "@/components/google-sign-in-button";
+
+export const metadata: Metadata = {
+  title: "Pricing · Memory Recap",
+  description: "Simple credit pricing for Memory Recap. Pay only for processed size.",
+};
 
 export default async function PricingPage() {
   const user = await getOptionalUser();
@@ -12,7 +22,10 @@ export default async function PricingPage() {
     <main className="mx-auto flex min-h-full w-full max-w-lg flex-col px-6 pb-16 pt-8">
       <header className="flex items-center justify-between">
         <Logo />
-        <Link href={user ? "/billing" : "/"} className="min-h-11 px-2 text-sm text-neutral-500">
+        <Link
+          href={user ? "/billing" : "/"}
+          className="min-h-11 px-2 text-sm text-neutral-500"
+        >
           {user ? "Billing" : "Home"}
         </Link>
       </header>
@@ -21,7 +34,8 @@ export default async function PricingPage() {
         <div>
           <h1 className="text-2xl font-medium tracking-tight">Pricing</h1>
           <p className="mt-2 text-neutral-500">
-            Pay only for processed size. Credits expire after 90 days.
+            Clear prices. Credits expire after 90 days. System failures restore
+            credits.
           </p>
         </div>
 
@@ -29,25 +43,25 @@ export default async function PricingPage() {
           <p className="text-sm text-neutral-500">Free</p>
           <p className="mt-2 text-3xl font-medium">{FREE_CREDITS} credits</p>
           <p className="mt-2 text-sm text-neutral-500">
-            One-time allowance for new accounts. Cannot be reset.
+            One-time for new accounts · ~{FREE_CREDITS} MB processed
           </p>
         </div>
 
-        <div className="rounded-[16px] bg-neutral-50 p-5 shadow-sm space-y-4">
+        <div className="space-y-4 rounded-[16px] bg-neutral-50 p-5 shadow-sm">
           <div>
             <p className="text-sm text-neutral-500">Pro Monthly</p>
-            <p className="mt-2 text-3xl font-medium">
-              {PRODUCT_CREDITS.subscription} credits / month
-            </p>
-            <p className="mt-2 text-sm text-neutral-500">
-              Recurring subscription. Cancel anytime. Access continues until
-              period end.
+            <p className="mt-2 text-3xl font-medium">${PRODUCT_USD.subscription}</p>
+            <p className="mt-1 text-sm text-neutral-500">
+              {PRODUCT_CREDITS.subscription} credits / month · cancel anytime
             </p>
           </div>
           {user ? (
             <BuyButton product="subscription" label="Subscribe" />
           ) : (
-            <GoogleSignInButton callbackUrl="/pricing" label="Sign in to subscribe" />
+            <GoogleSignInButton
+              callbackUrl="/pricing"
+              label="Sign in to subscribe"
+            />
           )}
         </div>
 
@@ -55,20 +69,20 @@ export default async function PricingPage() {
           <h2 className="text-xl font-medium">Credit packs</h2>
           {(
             [
-              ["credits_small", "Small", PRODUCT_CREDITS.credits_small],
-              ["credits_medium", "Medium", PRODUCT_CREDITS.credits_medium],
-              ["credits_large", "Large", PRODUCT_CREDITS.credits_large],
+              ["credits_small", "Small", PRODUCT_CREDITS.credits_small, PRODUCT_USD.credits_small],
+              ["credits_medium", "Medium", PRODUCT_CREDITS.credits_medium, PRODUCT_USD.credits_medium],
+              ["credits_large", "Large", PRODUCT_CREDITS.credits_large, PRODUCT_USD.credits_large],
             ] as const
-          ).map(([product, name, credits]) => (
+          ).map(([product, name, credits, usd]) => (
             <div
               key={product}
-              className="rounded-[16px] bg-neutral-50 p-5 shadow-sm space-y-4"
+              className="space-y-4 rounded-[16px] bg-neutral-50 p-5 shadow-sm"
             >
               <div>
                 <p className="text-sm text-neutral-500">{name} pack</p>
-                <p className="mt-2 text-2xl font-medium">{credits} credits</p>
-                <p className="mt-2 text-sm text-neutral-500">
-                  One-time purchase. Valid for 90 days.
+                <p className="mt-2 text-2xl font-medium">${usd}</p>
+                <p className="mt-1 text-sm text-neutral-500">
+                  {credits} credits · one-time · 90 days
                 </p>
               </div>
               {user ? (
@@ -81,6 +95,13 @@ export default async function PricingPage() {
               )}
             </div>
           ))}
+        </div>
+
+        <div className="space-y-3 text-sm text-neutral-500">
+          <p className="font-medium text-neutral-800">FAQ</p>
+          <p>1 credit ≈ 1 MB processed (minimum 10 per job).</p>
+          <p>If processing fails on our side, credits are restored.</p>
+          <p>Manage cards and cancellations in the billing portal.</p>
         </div>
       </section>
     </main>

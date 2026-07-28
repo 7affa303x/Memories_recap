@@ -1,6 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
-import { isCreemTestMode } from "@/lib/billing/config";
 import { handleCreemWebhookEvent } from "@/lib/billing/webhooks";
 
 export const runtime = "nodejs";
@@ -18,19 +17,14 @@ export async function POST(request: Request) {
   const signature = request.headers.get("creem-signature") || "";
   const secret = process.env.CREEM_WEBHOOK_SECRET || "";
 
-  if (secret) {
-    if (!signature || !verifySignature(rawBody, signature, secret)) {
-      return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
-    }
-  } else if (!isCreemTestMode()) {
+  if (!secret) {
     return NextResponse.json(
       { error: "Missing CREEM_WEBHOOK_SECRET" },
       { status: 503 }
     );
-  } else {
-    console.warn(
-      "CREEM_WEBHOOK_SECRET missing — accepting unsigned test webhook"
-    );
+  }
+  if (!signature || !verifySignature(rawBody, signature, secret)) {
+    return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
   try {
