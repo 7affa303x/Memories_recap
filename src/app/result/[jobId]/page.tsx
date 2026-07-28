@@ -1,13 +1,13 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { requireUser } from "@/lib/session";
 import { getJobForUser, getRecap } from "@/lib/jobs";
 import { signedRecapUrl } from "@/lib/supabase/admin";
 import { getAppUrl } from "@/lib/billing/config";
-import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { ShareControls } from "@/components/share-controls";
+import { AppHeader } from "@/components/app-header";
+import Link from "next/link";
 
 type Props = { params: Promise<{ jobId: string }> };
 
@@ -37,12 +37,7 @@ export default async function ResultPage({ params }: Props) {
 
   return (
     <main className="mx-auto flex min-h-full w-full max-w-lg flex-col px-6 pb-16 pt-8">
-      <header className="flex items-center justify-between">
-        <Logo />
-        <Link href="/dashboard" className="min-h-11 px-2 text-sm text-neutral-500">
-          Dashboard
-        </Link>
-      </header>
+      <AppHeader />
 
       <section className="mt-10 space-y-6">
         <div>

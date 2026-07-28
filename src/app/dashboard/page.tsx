@@ -2,9 +2,9 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { requireUser } from "@/lib/session";
 import { listJobsForUser } from "@/lib/jobs";
-import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { STAGE_LABELS } from "@/lib/types";
+import { AppHeader } from "@/components/app-header";
 
 export const metadata: Metadata = {
   title: "Dashboard · Memories Recap",
@@ -17,17 +17,7 @@ export default async function DashboardPage() {
 
   return (
     <main className="mx-auto flex min-h-full w-full max-w-lg flex-col px-6 pb-16 pt-8">
-      <header className="flex items-center justify-between">
-        <Logo />
-        <div className="flex items-center gap-2">
-          <Link href="/upload" className="min-h-11 px-2 text-sm text-neutral-500">
-            Upload
-          </Link>
-          <Link href="/billing" className="min-h-11 px-2 text-sm text-neutral-500">
-            Billing
-          </Link>
-        </div>
-      </header>
+      <AppHeader active="dashboard" />
 
       <section className="mt-10 space-y-6">
         <div className="flex items-end justify-between gap-3">

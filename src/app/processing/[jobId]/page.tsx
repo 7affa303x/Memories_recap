@@ -1,8 +1,8 @@
 import { requireUser } from "@/lib/session";
 import { getJobForUser } from "@/lib/jobs";
 import { notFound, redirect } from "next/navigation";
-import { Logo } from "@/components/logo";
 import { ProcessingTracker } from "@/components/processing-tracker";
+import { AppHeader } from "@/components/app-header";
 
 type Props = { params: Promise<{ jobId: string }> };
 
@@ -16,9 +16,7 @@ export default async function ProcessingPage({ params }: Props) {
 
   return (
     <main className="mx-auto flex min-h-full w-full max-w-lg flex-col px-6 pb-16 pt-8">
-      <header>
-        <Logo />
-      </header>
+      <AppHeader />
       <ProcessingTracker jobId={jobId} />
     </main>
   );
