@@ -101,7 +101,8 @@ export function ProcessingTracker({ jobId }: { jobId: string }) {
 
   const progress = job?.progress ?? 5;
   const stage = job?.stage || job?.status || "analyzing";
-  const failed = job?.status === "failed" || Boolean(error && job?.status === "failed");
+  const failed = job?.status === "failed";
+  const showError = failed || Boolean(error);
 
   return (
     <div className="mt-10 space-y-8">
@@ -151,23 +152,26 @@ export function ProcessingTracker({ jobId }: { jobId: string }) {
         })}
       </ol>
 
-      {failed ? (
+      {showError ? (
         <div className="space-y-3 rounded-[16px] bg-red-50 p-4">
           <p className="text-sm text-red-700">
-            {error || "Processing failed. If this was a system error, credits were restored."}
+            {error ||
+              "Processing failed. If this was a system error, credits were restored."}
           </p>
-          <div className="grid gap-3">
-            <Button
-              className="h-12 rounded-[16px]"
-              onClick={retry}
-              disabled={retrying}
-            >
-              {retrying ? "Retrying…" : "Retry processing"}
-            </Button>
-            <Button asChild variant="secondary" className="h-12 rounded-[16px]">
-              <Link href="/dashboard">Back to dashboard</Link>
-            </Button>
-          </div>
+          {failed ? (
+            <div className="grid gap-3">
+              <Button
+                className="h-12 rounded-[16px]"
+                onClick={retry}
+                disabled={retrying}
+              >
+                {retrying ? "Retrying…" : "Retry processing"}
+              </Button>
+              <Button asChild variant="secondary" className="h-12 rounded-[16px]">
+                <Link href="/dashboard">Back to dashboard</Link>
+              </Button>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>
