@@ -274,17 +274,16 @@ export function UploadWorkspace({
         }`}
       >
         <p className="text-base font-medium text-neutral-900">
-          Drag and drop videos
+          Choose videos from your gallery
         </p>
         <p className="mt-2 text-sm text-neutral-500">
-          or tap to select · up to {MAX_FILES_PER_JOB} files · 2 GB total
+          or drag and drop · up to {MAX_FILES_PER_JOB} files · 2 GB total
         </p>
         <input
           ref={inputRef}
           type="file"
-          accept="video/*"
+          accept="video/*,.mp4,.mov,.m4v,.webm"
           multiple
-          capture="environment"
           className="hidden"
           onChange={(e) => {
             if (e.target.files?.length) addFiles(e.target.files);

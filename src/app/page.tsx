@@ -112,23 +112,15 @@ export default async function LandingPage({
             How it feels
           </h2>
           <div className="overflow-hidden rounded-[20px] border border-green-100 bg-neutral-900 shadow-sm">
-            <div className="relative aspect-video bg-black">
-              <video
-                className="h-full w-full object-cover"
-                src="/demo/hero.mp4"
-                poster="/demo/poster.jpg"
-                autoPlay
-                muted
-                loop
-                playsInline
-                preload="metadata"
-              />
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-5">
-                <p className="text-sm text-green-100/90">Demo</p>
-                <p className="mt-1 font-display text-xl font-semibold text-white">
-                  From messy camera rolls → one calm story.
-                </p>
-              </div>
+            <div className="aspect-video bg-[linear-gradient(135deg,#14532d_0%,#052e16_55%,#166534_100%)] p-6 text-white">
+              <p className="text-sm text-green-100/90">What you get</p>
+              <p className="mt-8 font-display text-3xl font-semibold leading-snug">
+                From messy camera rolls → one calm story.
+              </p>
+              <p className="mt-4 max-w-sm text-sm text-green-50/90">
+                Smart moment selection keeps order, skips black/shaky fluff, and
+                exports landscape + vertical automatically.
+              </p>
             </div>
           </div>
         </section>
