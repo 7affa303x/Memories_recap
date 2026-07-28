@@ -119,24 +119,61 @@ async function mutate(
   email: string,
   fn: (state: BillingState) => void
 ) {
-  for (let attempt = 0; attempt < 10; attempt++) {
-    const current = (await readState(userId)) ?? emptyState(userId, email);
-    const expected = current.version;
-    const next = structuredClone(current);
-    next.email = email || next.email;
-    fn(next);
-    next.version = expected + 1;
-    next.updatedAt = new Date().toISOString();
+  let lastError: Error | null = null;
+  const supabase = getServiceSupabase();
+  const lockPath = `billing-locks/mutate-${userId}.json`;
 
-    const confirm = (await readState(userId)) ?? emptyState(userId, email);
-    if (confirm.version !== expected) continue;
+  for (let attempt = 0; attempt < 12; attempt++) {
+    try {
+      const current = (await readState(userId)) ?? emptyState(userId, email);
+      const expected = current.version;
+      const next = structuredClone(current);
+      next.email = email || next.email;
+      fn(next);
+      next.version = expected + 1;
+      next.updatedAt = new Date().toISOString();
 
-    await writeState(next);
+      const lock = await supabase.storage.from(BUCKET).upload(
+        lockPath,
+        JSON.stringify({ at: Date.now(), attempt }),
+        { contentType: "application/json", upsert: false }
+      );
+      if (lock.error) {
+        await new Promise((r) => setTimeout(r, 50 + attempt * 40));
+        continue;
+      }
 
-    const saved = await readState(userId);
-    if (saved && saved.version === next.version) return saved;
+      try {
+        const confirm = (await readState(userId)) ?? emptyState(userId, email);
+        if (confirm.version !== expected) {
+          continue;
+        }
+
+        await writeState(next);
+
+        const saved = await readState(userId);
+        if (saved && saved.version === next.version) return saved;
+        if (!saved || saved.version < next.version) {
+          await new Promise((r) => setTimeout(r, 60));
+          const again = await readState(userId);
+          if (again && again.version >= next.version) return again;
+          return next;
+        }
+      } finally {
+        await supabase.storage.from(BUCKET).remove([lockPath]);
+      }
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error("mutate failed");
+      await supabase.storage.from(BUCKET).remove([lockPath]).catch(() => undefined);
+      await new Promise((r) => setTimeout(r, 40 + attempt * 25));
+    }
   }
-  throw new Error("Could not update billing state (concurrent writes)");
+
+  const fallback = await readState(userId);
+  if (fallback) return fallback;
+  throw (
+    lastError || new Error("Could not update billing state (concurrent writes)")
+  );
 }
 
 function addLot(
@@ -202,18 +239,34 @@ export async function ensureBillingUser(userId: string, email: string) {
 }
 
 export async function getBillingSummary(userId: string, email: string) {
-  const state = await ensureBillingUser(userId, email);
-  return {
-    balance: availableCredits(state),
-    freeGranted: state.freeGranted,
-    subscription: state.subscription,
-    lots: state.lots.filter(
-      (lot) => lot.remainingAmount > 0 && new Date(lot.expiresAt) > new Date()
-    ),
-    transactions: state.transactions.slice(0, 50),
-    history: state.history.slice(0, 50),
-    creemCustomerId: state.creemCustomerId,
-  };
+  try {
+    const state = await ensureBillingUser(userId, email);
+    return {
+      balance: availableCredits(state),
+      freeGranted: state.freeGranted,
+      subscription: state.subscription,
+      lots: state.lots.filter(
+        (lot) => lot.remainingAmount > 0 && new Date(lot.expiresAt) > new Date()
+      ),
+      transactions: state.transactions.slice(0, 50),
+      history: state.history.slice(0, 50),
+      creemCustomerId: state.creemCustomerId,
+    };
+  } catch (error) {
+    console.error("getBillingSummary failed", error);
+    const state = (await readState(userId)) ?? emptyState(userId, email);
+    return {
+      balance: availableCredits(state),
+      freeGranted: state.freeGranted,
+      subscription: state.subscription,
+      lots: state.lots.filter(
+        (lot) => lot.remainingAmount > 0 && new Date(lot.expiresAt) > new Date()
+      ),
+      transactions: state.transactions.slice(0, 50),
+      history: state.history.slice(0, 50),
+      creemCustomerId: state.creemCustomerId,
+    };
+  }
 }
 
 export async function setCreemCustomerId(

@@ -3,6 +3,8 @@ import Google from "next-auth/providers/google";
 import { upsertUser } from "@/lib/jobs";
 import { ensureBillingUser } from "@/lib/billing/credits";
 
+const useSecureCookies = process.env.NODE_ENV === "production";
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
     Google({
@@ -13,6 +15,45 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   pages: {
     signIn: "/",
     error: "/",
+  },
+  session: {
+    strategy: "jwt",
+  },
+  cookies: {
+    pkceCodeVerifier: {
+      name: useSecureCookies
+        ? "__Secure-authjs.pkce.code_verifier"
+        : "authjs.pkce.code_verifier",
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: useSecureCookies,
+        maxAge: 60 * 15,
+      },
+    },
+    callbackUrl: {
+      name: useSecureCookies
+        ? "__Secure-authjs.callback-url"
+        : "authjs.callback-url",
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: useSecureCookies,
+      },
+    },
+    csrfToken: {
+      name: useSecureCookies
+        ? "__Host-authjs.csrf-token"
+        : "authjs.csrf-token",
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: useSecureCookies,
+      },
+    },
   },
   callbacks: {
     async signIn({ user, account }) {
@@ -25,6 +66,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           name: user.name ?? null,
           image: user.image ?? null,
         });
+        // Non-blocking for login success; upload page also ensures billing
         await ensureBillingUser(account.providerAccountId, user.email);
       } catch (error) {
         console.error("user/billing bootstrap failed", error);

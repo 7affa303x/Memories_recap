@@ -57,7 +57,9 @@ export default async function LandingPage({
 
           {params.error ? (
             <p className="mt-6 rounded-[16px] bg-red-50 px-4 py-3 text-sm text-red-700">
-              Sign in failed. Clear cookies for this site, then try again.
+              {user
+                ? "Your session is ready. Tap Upload memories below to continue."
+                : "Sign in was interrupted (browser cookie). Close extra tabs for this site, then try Google again."}
             </p>
           ) : null}
 
