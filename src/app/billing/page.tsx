@@ -60,6 +60,7 @@ export default async function BillingPage({
 
   return (
     <main className="mx-auto flex min-h-full w-full max-w-lg flex-col px-6 pb-16 pt-8">
+      <CheckoutSuccessBeacon active={params.checkout === "success"} />
       <header className="flex items-center justify-between">
         <Logo />
         <Link href="/pricing" className="min-h-11 px-2 text-sm text-neutral-500">
