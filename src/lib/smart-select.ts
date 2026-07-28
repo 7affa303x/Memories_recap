@@ -1,6 +1,8 @@
 import { spawn } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { hasVisionProvider, scoreMemoryFrame } from "@/lib/ai-vision";
+import { logInfo } from "@/lib/logger";
 
 function runCapture(bin: string, args: string[]) {
   return new Promise<{ code: number; stderr: string; stdout: string }>(
@@ -112,7 +114,7 @@ export type SelectedClip = {
 /**
  * Smart clip selection: scene changes + brightness/contrast scoring.
  * Keeps chronological order, spreads diversity, avoids black/flat frames.
- * Optional OpenAI vision boost when OPENAI_API_KEY / AI_GATEWAY_API_KEY is set.
+ * Optional vision boost via Gemini → Groq → OpenAI when keys are set.
  */
 export async function selectBestClips(input: {
   bin: string;
@@ -154,6 +156,29 @@ export async function selectBestClips(input: {
 
     scored.sort((a, b) => b.score - a.score);
 
+    // Vision AI: re-score top local candidates before picking
+    if (hasVisionProvider()) {
+      const top = scored.slice(0, Math.min(8, scored.length));
+      for (const [i, candidate] of top.entries()) {
+        const framePath = join(
+          input.workDir,
+          `ai-cand-${fileIndex}-${i}.jpg`
+        );
+        try {
+          await extractFrame(input.bin, file.path, candidate.start, framePath);
+          const vision = await scoreMemoryFrame(framePath);
+          if (vision) candidate.score += vision.score * 1.15;
+        } catch {
+          // keep local score
+        }
+      }
+      scored.sort((a, b) => b.score - a.score);
+      logInfo("vision_candidates_scored", {
+        fileIndex,
+        count: top.length,
+      });
+    }
+
     const clipLen = Math.min(
       7,
       Math.max(2.5, perSourceBudget / Math.max(1, Math.min(3, scored.length)))
@@ -179,19 +204,18 @@ export async function selectBestClips(input: {
     picked
       .sort((a, b) => a - b)
       .forEach((start) => {
+        const match = scored.find((s) => s.start === start);
         selected.push({
           sourcePath: file.path,
           start,
           duration: Math.min(clipLen, Math.max(1.5, file.duration - start)),
-          score: 1,
+          score: match?.score ?? 1,
         });
       });
   }
 
-  // Optional AI re-rank of a few frames if key present (non-blocking soft boost)
-  await maybeBoostWithAi(input.bin, input.workDir, selected).catch(() => undefined);
-
   // Trim to target length while keeping chronological order
+  // Prefer higher scores when over budget by dropping weakest within order windows later if needed.
   const ordered = selected.sort((a, b) => {
     const ai = input.files.findIndex((f) => f.path === a.sourcePath);
     const bi = input.files.findIndex((f) => f.path === b.sourcePath);
@@ -219,65 +243,6 @@ export async function selectBestClips(input: {
   }
 
   return final;
-}
-
-async function maybeBoostWithAi(
-  bin: string,
-  workDir: string,
-  clips: SelectedClip[]
-) {
-  const key =
-    process.env.OPENAI_API_KEY ||
-    process.env.AI_GATEWAY_API_KEY ||
-    process.env.VERCEL_AI_GATEWAY_API_KEY;
-  if (!key || clips.length === 0) return;
-
-  // Keep cheap: score at most 6 clips
-  const sample = clips.slice(0, 6);
-  for (const [i, clip] of sample.entries()) {
-    const frame = join(workDir, `ai-frame-${i}.jpg`);
-    await extractFrame(bin, clip.sourcePath, clip.start + clip.duration / 2, frame);
-    const b64 = (await readFile(frame)).toString("base64");
-    const baseUrl =
-      process.env.OPENAI_BASE_URL ||
-      process.env.AI_GATEWAY_URL ||
-      "https://api.openai.com/v1";
-    const res = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${key}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: process.env.OPENAI_VISION_MODEL || "gpt-4o-mini",
-        max_tokens: 40,
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: "Rate this memory frame 0-10 for people/faces, emotion, color, clarity, and interesting action. Reply with only a number.",
-              },
-              {
-                type: "image_url",
-                image_url: { url: `data:image/jpeg;base64,${b64}` },
-              },
-            ],
-          },
-        ],
-      }),
-    });
-    if (!res.ok) continue;
-    const json = (await res.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-    };
-    const text = json.choices?.[0]?.message?.content || "";
-    const num = Number(text.match(/(\d+(?:\.\d+)?)/)?.[1] || "0");
-    if (Number.isFinite(num)) {
-      clip.score += Math.min(10, Math.max(0, num)) / 10;
-    }
-  }
 }
 
 export async function writeConcatList(path: string, files: string[]) {

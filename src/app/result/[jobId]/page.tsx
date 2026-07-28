@@ -46,7 +46,8 @@ export default async function ResultPage({ params }: Props) {
 
       <section className="mt-10 space-y-6">
         <div>
-          <h1 className="text-2xl font-medium tracking-tight">Your recap is ready</h1>
+          <p className="text-sm font-medium text-green-700">Success</p>
+          <h1 className="mt-1 text-2xl font-medium tracking-tight">Your recap is ready</h1>
           <p className="mt-2 text-neutral-500">
             Landscape for watching. Vertical for stories.
           </p>

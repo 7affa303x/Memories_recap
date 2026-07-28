@@ -19,11 +19,9 @@ export function getServiceSupabase() {
   return admin;
 }
 
-/** @deprecated prefer signedRecapUrl — outputs are private by default */
-export function publicRecapUrl(path: string) {
-  const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!base) throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL");
-  return `${base}/storage/v1/object/public/recaps/${path}`;
+/** @deprecated Outputs are private — always use signedRecapUrl. */
+export function publicRecapUrl(_path: string): never {
+  throw new Error("publicRecapUrl disabled — use signedRecapUrl");
 }
 
 export async function signedRecapUrl(
