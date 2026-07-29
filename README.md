@@ -2,6 +2,9 @@
 
 Turn heavy memories into watchable moments.
 
+> **Canonical branch: `main`.**  
+> Deploy and continue product work from `main` only. Older `cursor/*` branches are history; do not redeploy them over production.
+
 ## Product flow
 
 Landing → Upload → Processing → Result → Share
