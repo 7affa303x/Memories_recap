@@ -1,17 +1,32 @@
 import { NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase/admin";
 import { hasVisionProvider } from "@/lib/ai-vision";
-import { isCreemTestMode } from "@/lib/billing/config";
+import { getBillingProvider, isCreemTestMode } from "@/lib/billing/config";
+import vercelConfig from "../../../../vercel.json";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function hasVercelCronConfigured() {
+  const crons = (vercelConfig as { crons?: unknown[] }).crons;
+  return Array.isArray(crons) && crons.length > 0;
+}
+
 export async function GET() {
+  const provider = getBillingProvider();
   const checks: Record<string, boolean | string> = {
     app: true,
+    billingProvider: provider,
     creemKey: Boolean(process.env.CREEM_API_KEY),
     creemWebhook: Boolean(process.env.CREEM_WEBHOOK_SECRET),
     creemTestMode: isCreemTestMode(),
+    gumroadToken: Boolean(process.env.GUMROAD_ACCESS_TOKEN),
+    gumroadWebhook: Boolean(process.env.GUMROAD_WEBHOOK_SECRET),
+    // Soft check — present/absent reported but does not fail health alone
+    blobToken: Boolean(process.env.BLOB_READ_WRITE_TOKEN),
+    cronConfigured:
+      hasVercelCronConfigured() ||
+      Boolean(process.env.CRON_SECRET || process.env.SETUP_SECRET),
     authGoogle: Boolean(
       process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET
     ),
@@ -35,9 +50,14 @@ export async function GET() {
       error instanceof Error ? error.message : "storage_failed";
   }
 
+  const billingConfigured =
+    provider === "gumroad"
+      ? Boolean(checks.gumroadToken)
+      : Boolean(checks.creemKey);
+
   const ok =
     checks.app &&
-    checks.creemKey &&
+    billingConfigured &&
     checks.authGoogle &&
     checks.supabaseUrl &&
     checks.supabaseService &&

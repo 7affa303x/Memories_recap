@@ -1,13 +1,41 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Script from "next/script";
+import {
+  COOKIE_CONSENT_EVENT,
+  COOKIE_CONSENT_KEY,
+} from "@/components/cookie-banner";
 
 /**
  * Optional ad pixels. Set NEXT_PUBLIC_META_PIXEL_ID / NEXT_PUBLIC_TIKTOK_PIXEL_ID.
+ * Loads only after soft cookie consent when pixels are configured.
  */
 export function AnalyticsPixels() {
   const metaId = process.env.NEXT_PUBLIC_META_PIXEL_ID;
   const tiktokId = process.env.NEXT_PUBLIC_TIKTOK_PIXEL_ID;
+  const configured = Boolean(metaId || tiktokId);
+  const [allowed, setAllowed] = useState(false);
+
+  useEffect(() => {
+    if (!configured) return;
+    function read() {
+      try {
+        setAllowed(window.localStorage.getItem(COOKIE_CONSENT_KEY) === "accepted");
+      } catch {
+        setAllowed(false);
+      }
+    }
+    read();
+    const onConsent = (event: Event) => {
+      const detail = (event as CustomEvent<string>).detail;
+      setAllowed(detail === "accepted");
+    };
+    window.addEventListener(COOKIE_CONSENT_EVENT, onConsent);
+    return () => window.removeEventListener(COOKIE_CONSENT_EVENT, onConsent);
+  }, [configured]);
+
+  if (!configured || !allowed) return null;
 
   return (
     <>
@@ -64,6 +92,11 @@ export function trackClientEvent(
   params?: Record<string, unknown>
 ) {
   if (typeof window === "undefined") return;
+  try {
+    if (window.localStorage.getItem(COOKIE_CONSENT_KEY) !== "accepted") return;
+  } catch {
+    return;
+  }
   const w = window as Window & {
     fbq?: (...args: unknown[]) => void;
     ttq?: { track: (event: string, payload?: Record<string, unknown>) => void };

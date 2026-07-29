@@ -7,7 +7,8 @@ export type JobStatus =
   | "building"
   | "rendering"
   | "completed"
-  | "failed";
+  | "failed"
+  | "cancelled";
 
 export type UserRow = {
   id: string;
@@ -25,6 +26,14 @@ export type RecapOptions = {
   /** Pro-only: uhd = 4K landscape / 4K-tall vertical */
   outputQuality?: "fhd" | "uhd" | null;
   folder?: string | null;
+  /** Soft target recap length in seconds (omit/null = auto). */
+  maxSeconds?: number | null;
+  /** Optional end-card title line (drawn when font available). */
+  endCardTitle?: string | null;
+  /** Show date on end card when true. */
+  endCardShowDate?: boolean | null;
+  /** Pro-only: omit branded end card. */
+  hideEndCard?: boolean | null;
 };
 
 export type JobRow = {
@@ -44,6 +53,8 @@ export type JobRow = {
   credits_charged: number | null;
   title: string | null;
   folder?: string | null;
+  /** Soft-hidden from dashboard list (completed jobs removed by user). */
+  hidden?: boolean;
   recap_options?: RecapOptions | null;
   /** Concurrent write counter */
   version: number;
@@ -69,11 +80,12 @@ export type UploadRow = {
 
 export type RecapVersion = {
   generation: number;
-  landscape_path: string;
-  vertical_path: string;
+  landscape_path: string | null;
+  vertical_path: string | null;
   highlights_path?: string | null;
   story_path?: string | null;
   tiktok_path?: string | null;
+  preview_path?: string | null;
   mood?: string | null;
   created_at: string;
 };
@@ -87,11 +99,15 @@ export type RecapRow = {
   highlights_path?: string | null;
   story_path?: string | null;
   tiktok_path?: string | null;
+  preview_path?: string | null;
   duration_seconds: number | null;
   expires_at: string | null;
   created_at: string;
   current_generation?: number;
   versions?: RecapVersion[];
+  /** Optional 1–5 user rating after watch */
+  rating?: number | null;
+  rated_at?: string | null;
 };
 
 export type ShareIndex = {
@@ -102,6 +118,9 @@ export type ShareIndex = {
   password_hash: string | null;
   created_at: string;
   audience?: "public" | "family" | null;
+  /** Public view count (best-effort). */
+  view_count?: number;
+  last_viewed_at?: string | null;
 };
 
 export const STAGE_LABELS: Record<string, string> = {
@@ -114,6 +133,7 @@ export const STAGE_LABELS: Record<string, string> = {
   pending: "Preparing",
   completed: "Done",
   failed: "Something went wrong",
+  cancelled: "Cancelled",
 };
 
 export {
@@ -123,10 +143,19 @@ export {
 } from "@/lib/media";
 export const RECAP_TTL_DAYS = 30;
 export const RECAP_TTL_DAYS_PRO = 90;
+/** Platform process route maxDuration (Vercel Fluid / serverless). */
+export const PROCESS_MAX_DURATION_SECONDS = 300;
 
 export function estimateProcessingSeconds(totalBytes: number, fileCount: number) {
   const mb = totalBytes / (1024 * 1024);
   return Math.max(60, Math.round(mb * 2.2 + fileCount * 15));
+}
+
+/** Honest warning when estimated time may exceed the ~5 min process window. */
+export function softLimitDurationMessage(estimateSeconds: number) {
+  if (estimateSeconds <= PROCESS_MAX_DURATION_SECONDS) return null;
+  const mins = Math.ceil(PROCESS_MAX_DURATION_SECONDS / 60);
+  return `Large batches can run past our ~${mins} minute processing window. Split into fewer or shorter clips so the render finishes cleanly.`;
 }
 
 export function formatBytes(bytes: number) {

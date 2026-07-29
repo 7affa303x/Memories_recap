@@ -40,12 +40,58 @@ export default async function PricingPage() {
           </p>
         </div>
 
+        <div className="overflow-x-auto rounded-[16px] bg-neutral-50 p-5 shadow-sm">
+          <p className="text-sm font-medium text-neutral-800">Free vs Pro</p>
+          <table className="mt-4 w-full min-w-[280px] text-left text-sm">
+            <thead>
+              <tr className="border-b border-neutral-200 text-neutral-500">
+                <th className="pb-2 pr-3 font-medium">Feature</th>
+                <th className="pb-2 pr-3 font-medium">Free</th>
+                <th className="pb-2 font-medium">Pro</th>
+              </tr>
+            </thead>
+            <tbody className="text-neutral-700">
+              <tr className="border-b border-neutral-100">
+                <td className="py-2.5 pr-3">Watermark</td>
+                <td className="py-2.5 pr-3">
+                  Light overlay (removed with a credit pack)
+                </td>
+                <td className="py-2.5">None (end card kept)</td>
+              </tr>
+              <tr className="border-b border-neutral-100">
+                <td className="py-2.5 pr-3">Output</td>
+                <td className="py-2.5 pr-3">Full HD</td>
+                <td className="py-2.5">Up to 4K</td>
+              </tr>
+              <tr className="border-b border-neutral-100">
+                <td className="py-2.5 pr-3">Highlights cut</td>
+                <td className="py-2.5 pr-3">—</td>
+                <td className="py-2.5">Yes</td>
+              </tr>
+              <tr className="border-b border-neutral-100">
+                <td className="py-2.5 pr-3">Archive</td>
+                <td className="py-2.5 pr-3">~30 days</td>
+                <td className="py-2.5">~90 days</td>
+              </tr>
+              <tr>
+                <td className="py-2.5 pr-3">AI scoring</td>
+                <td className="py-2.5 pr-3">Standard</td>
+                <td className="py-2.5">Stronger Pro vision</td>
+              </tr>
+            </tbody>
+          </table>
+          <p className="mt-4 text-xs text-neutral-500">
+            Credit packs remove the overlay watermark; Pro adds 4K, stronger AI,
+            highlights, longer archive.
+          </p>
+        </div>
+
         <div className="rounded-[16px] bg-neutral-50 p-5 shadow-sm">
           <p className="text-sm text-neutral-500">Free</p>
           <p className="mt-2 text-3xl font-medium">{FREE_CREDITS} credits</p>
           <p className="mt-2 text-sm text-neutral-500">
-            On signup · +50 daily when balance ≤ 500 · music + moods included ·
-            light watermark · brand end card
+            On signup · music + moods included · light watermark · brand end
+            card
           </p>
         </div>
 
@@ -75,8 +121,8 @@ export default async function PricingPage() {
             <p className="mt-2 text-3xl font-medium">$170</p>
             <p className="mt-1 text-sm text-neutral-500">
               Same Pro benefits · ~2 months free vs monthly · honest discount for
-              people who stay. Email support to enable checkout while we wire the
-              Creem annual product.
+              people who stay. Email support to enable annual checkout while we
+              finish wiring the product in Gumroad (Creem fallback if configured).
             </p>
           </div>
           <Button asChild variant="secondary" className="h-12 w-full rounded-[16px]">
@@ -88,6 +134,10 @@ export default async function PricingPage() {
 
         <div className="space-y-4">
           <h2 className="text-xl font-medium">Credit packs</h2>
+          <p className="text-sm text-neutral-500">
+            Credit packs remove the overlay watermark; Pro adds 4K, stronger AI,
+            highlights, longer archive.
+          </p>
           {(
             [
               ["credits_small", "Small", PRODUCT_CREDITS.credits_small, PRODUCT_USD.credits_small],
@@ -123,8 +173,9 @@ export default async function PricingPage() {
           <p>1 credit ≈ 1 MB processed (minimum 10 per job).</p>
           <p>If processing fails on our side, credits are restored.</p>
           <p>
-            Checkout is powered by Gumroad (or Creem as fallback). After payment,
-            credits land on your Memories Recap account automatically.
+            Checkout is powered by Gumroad (primary) with Creem as fallback.
+            After payment, credits land on your Memories Recap account
+            automatically.
           </p>
           <p>Manage cards and memberships from the billing portal / Gumroad library.</p>
           <p>

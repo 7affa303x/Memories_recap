@@ -133,7 +133,7 @@ export async function listJobsForUser(userId: string) {
   const jobs: JobRow[] = [];
   for (const path of paths) {
     const row = await readJson<JobRow>(path);
-    if (row) jobs.push(row);
+    if (row && !row.hidden) jobs.push(row);
   }
   return jobs.sort(
     (a, b) =>
@@ -161,6 +161,7 @@ export async function updateJob(
       | "credits_charged"
       | "title"
       | "folder"
+      | "hidden"
       | "recap_options"
       | "recap_generation"
     >
@@ -235,19 +236,117 @@ export async function deleteUpload(
 ) {
   const upload = await getUpload(jobIdValue, userId, uploadId);
   if (upload?.storage_path) {
-    if (upload.storage_path.startsWith("blob:")) {
-      try {
-        const { del } = await import("@vercel/blob");
-        await del(upload.storage_path.replace(/^blob:/, ""));
-      } catch {
-        // best-effort
-      }
-    } else {
-      const supabase = getServiceSupabase();
-      await supabase.storage.from("memories").remove([upload.storage_path]);
-    }
+    await deleteMediaObject(upload.storage_path);
   }
   await removePath(`uploads/${userId}/${jobIdValue}/${uploadId}.json`);
+}
+
+/** Delete a media object from Vercel Blob or Supabase (memories, then recaps). */
+export async function deleteMediaObject(storagePath: string) {
+  if (!storagePath) return;
+  if (storagePath.startsWith("blob:")) {
+    try {
+      const { del } = await import("@vercel/blob");
+      await del(storagePath.replace(/^blob:/, ""));
+    } catch {
+      // best-effort
+    }
+    return;
+  }
+  const supabase = getServiceSupabase();
+  const memories = await supabase.storage.from("memories").remove([storagePath]);
+  if (!memories.error) return;
+  await supabase.storage.from("recaps").remove([storagePath]).catch(() => undefined);
+}
+
+function collectRecapMediaPaths(recap: RecapRow): string[] {
+  const paths = new Set<string>();
+  const add = (p: string | null | undefined) => {
+    if (p) paths.add(p);
+  };
+  add(recap.landscape_path);
+  add(recap.vertical_path);
+  add(recap.highlights_path);
+  add(recap.story_path);
+  add(recap.tiktok_path);
+  add(recap.preview_path);
+  for (const version of recap.versions || []) {
+    add(version.landscape_path);
+    add(version.vertical_path);
+    add(version.highlights_path);
+    add(version.story_path);
+    add(version.tiktok_path);
+    add(version.preview_path);
+  }
+  return [...paths];
+}
+
+/**
+ * Delete expired recap media objects and clear path fields.
+ * Returns true when media was purged.
+ */
+export async function purgeExpiredRecapMedia(
+  jobIdValue: string,
+  userId: string
+): Promise<boolean> {
+  const path = `recaps/${userId}/${jobIdValue}.json`;
+  const recap = await readJson<RecapRow>(path);
+  if (!recap || !isRecapExpired(recap)) return false;
+
+  const mediaPaths = collectRecapMediaPaths(recap);
+  if (mediaPaths.length === 0) return false;
+
+  await Promise.all(mediaPaths.map((p) => deleteMediaObject(p)));
+
+  const clearedVersions = (recap.versions || []).map((v) => ({
+    ...v,
+    landscape_path: null as string | null,
+    vertical_path: null as string | null,
+    highlights_path: null as string | null,
+    story_path: null as string | null,
+    tiktok_path: null as string | null,
+    preview_path: null as string | null,
+  }));
+
+  const cleared: RecapRow = {
+    ...recap,
+    landscape_path: null,
+    vertical_path: null,
+    highlights_path: null,
+    story_path: null,
+    tiktok_path: null,
+    preview_path: null,
+    versions: clearedVersions,
+  };
+  await writeJson(path, cleared).catch(() => undefined);
+  return true;
+}
+
+/** Scan a bounded set of user/job recaps and purge expired media. */
+export async function cleanupExpiredRecaps(limit = 40): Promise<number> {
+  const supabase = getServiceSupabase();
+  const { data: userFolders, error } = await supabase.storage
+    .from(BUCKET)
+    .list("recaps", { limit: 200 });
+  if (error || !userFolders?.length) return 0;
+
+  let cleaned = 0;
+  for (const folder of userFolders) {
+    if (cleaned >= limit) break;
+    if (!folder.name || folder.name.includes(".")) continue;
+    const userId = folder.name;
+    const { data: files } = await supabase.storage
+      .from(BUCKET)
+      .list(`recaps/${userId}`, { limit: 100 });
+    for (const file of files || []) {
+      if (cleaned >= limit) break;
+      if (!file.name.endsWith(".json")) continue;
+      const jobIdValue = file.name.replace(/\.json$/, "");
+      const did = await purgeExpiredRecapMedia(jobIdValue, userId);
+      if (did) cleaned += 1;
+    }
+  }
+  return cleaned;
 }
 
 export async function upsertRecap(input: {
@@ -259,6 +358,7 @@ export async function upsertRecap(input: {
   highlightsPath?: string | null;
   storyPath?: string | null;
   tiktokPath?: string | null;
+  previewPath?: string | null;
   mood?: string | null;
   ttlDays?: number;
   generation?: number;
@@ -278,6 +378,7 @@ export async function upsertRecap(input: {
     highlights_path: input.highlightsPath ?? null,
     story_path: input.storyPath ?? null,
     tiktok_path: input.tiktokPath ?? null,
+    preview_path: input.previewPath ?? null,
     mood: input.mood ?? null,
     created_at: new Date().toISOString(),
   };
@@ -291,18 +392,114 @@ export async function upsertRecap(input: {
     highlights_path: input.highlightsPath ?? null,
     story_path: input.storyPath ?? null,
     tiktok_path: input.tiktokPath ?? null,
+    preview_path: input.previewPath ?? null,
     duration_seconds: input.durationSeconds,
     expires_at: expiresAt,
     created_at: existing?.created_at ?? new Date().toISOString(),
     current_generation: generation,
     versions,
+    rating: existing?.rating ?? null,
+    rated_at: existing?.rated_at ?? null,
   };
   await writeJson(`recaps/${input.userId}/${input.jobId}.json`, recap);
   return recap;
 }
 
+/** Point current recap media at a prior version (no re-render). */
+export async function restoreRecapVersion(
+  jobIdValue: string,
+  userId: string,
+  generation: number
+) {
+  const path = `recaps/${userId}/${jobIdValue}.json`;
+  const recap = await readJson<RecapRow>(path);
+  if (!recap) return null;
+  const version = (recap.versions || []).find((v) => v.generation === generation);
+  if (!version?.landscape_path) return null;
+  const next: RecapRow = {
+    ...recap,
+    landscape_path: version.landscape_path,
+    vertical_path: version.vertical_path,
+    highlights_path: version.highlights_path ?? null,
+    story_path: version.story_path ?? null,
+    tiktok_path: version.tiktok_path ?? null,
+    preview_path: version.preview_path ?? null,
+    current_generation: version.generation,
+  };
+  await writeJson(path, next);
+  return next;
+}
+
+export async function setRecapRating(
+  jobIdValue: string,
+  userId: string,
+  rating: number
+) {
+  const path = `recaps/${userId}/${jobIdValue}.json`;
+  const recap = await readJson<RecapRow>(path);
+  if (!recap) return null;
+  const clamped = Math.max(1, Math.min(5, Math.round(rating)));
+  const next: RecapRow = {
+    ...recap,
+    rating: clamped,
+    rated_at: new Date().toISOString(),
+  };
+  await writeJson(path, next);
+  return next;
+}
+
+export async function setRecapPreviewPath(
+  jobIdValue: string,
+  userId: string,
+  previewPath: string
+) {
+  const path = `recaps/${userId}/${jobIdValue}.json`;
+  const recap = await readJson<RecapRow>(path);
+  if (!recap) return null;
+  const generation = recap.current_generation || 1;
+  const versions = (recap.versions || []).map((v) =>
+    v.generation === generation ? { ...v, preview_path: previewPath } : v
+  );
+  const next: RecapRow = {
+    ...recap,
+    preview_path: previewPath,
+    versions,
+  };
+  await writeJson(path, next);
+  return next;
+}
+
+/** Light TTL helper: if expired, clear media paths on read. */
+export function isRecapExpired(recap: RecapRow) {
+  return Boolean(recap.expires_at && new Date(recap.expires_at) < new Date());
+}
+
 export async function getRecap(jobIdValue: string, userId: string) {
-  return readJson<RecapRow>(`recaps/${userId}/${jobIdValue}.json`);
+  const path = `recaps/${userId}/${jobIdValue}.json`;
+  const recap = await readJson<RecapRow>(path);
+  if (!recap) return null;
+  if (!isRecapExpired(recap)) return recap;
+  if (
+    !recap.landscape_path &&
+    !recap.vertical_path &&
+    !recap.highlights_path &&
+    !recap.story_path &&
+    !recap.tiktok_path &&
+    !recap.preview_path &&
+    !(recap.versions || []).some(
+      (v) =>
+        v.landscape_path ||
+        v.vertical_path ||
+        v.highlights_path ||
+        v.story_path ||
+        v.tiktok_path ||
+        v.preview_path
+    )
+  ) {
+    return recap;
+  }
+  await purgeExpiredRecapMedia(jobIdValue, userId);
+  return (await readJson<RecapRow>(path)) ?? recap;
 }
 
 export async function ensureShareLink(
@@ -354,6 +551,20 @@ export async function getShareByToken(token: string) {
   return readJson<ShareIndex>(`shares/${token}.json`);
 }
 
+/** Best-effort public view counter for share links. */
+export async function recordShareView(token: string) {
+  const path = `shares/${token}.json`;
+  const share = await readJson<ShareIndex>(path);
+  if (!share) return null;
+  const next: ShareIndex = {
+    ...share,
+    view_count: (share.view_count || 0) + 1,
+    last_viewed_at: new Date().toISOString(),
+  };
+  await writeJson(path, next);
+  return next;
+}
+
 export async function appendJobLog(
   userId: string,
   jobIdValue: string,
@@ -401,6 +612,77 @@ export async function enqueueJob(jobIdValue: string, userId: string) {
 
 export async function dequeueJob(jobIdValue: string) {
   await removePath(`queue/${jobIdValue}.json`);
+}
+
+export type ProcessingClaim = {
+  jobId: string;
+  userId: string;
+  startedAt: string;
+};
+
+/** Claim written when processJob starts so cron can find mid-process jobs. */
+export async function enqueueProcessingClaim(
+  jobIdValue: string,
+  userId: string
+) {
+  await writeJson(`processing/${jobIdValue}.json`, {
+    jobId: jobIdValue,
+    userId,
+    startedAt: new Date().toISOString(),
+  } satisfies ProcessingClaim);
+}
+
+export async function clearProcessingClaim(jobIdValue: string) {
+  await removePath(`processing/${jobIdValue}.json`);
+}
+
+export async function listProcessingClaims(limit = 50) {
+  const paths = await listJsonPaths("processing");
+  const items: ProcessingClaim[] = [];
+  for (const path of paths) {
+    const row = await readJson<ProcessingClaim>(path);
+    if (row?.jobId && row?.userId) items.push(row);
+  }
+  return items
+    .sort(
+      (a, b) =>
+        new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime()
+    )
+    .slice(0, limit);
+}
+
+/**
+ * Scan queue + processing claims for stuck-job recovery (avoids listing all users).
+ */
+export async function listRecentJobsForRecovery(limit = 50) {
+  const queued = await listQueuedJobs(limit);
+  const processing = await listProcessingClaims(limit);
+  const byId = new Map<
+    string,
+    { jobId: string; userId: string; at: string; source: "queue" | "processing" }
+  >();
+  for (const item of queued) {
+    byId.set(item.jobId, {
+      jobId: item.jobId,
+      userId: item.userId,
+      at: item.at,
+      source: "queue",
+    });
+  }
+  for (const item of processing) {
+    const existing = byId.get(item.jobId);
+    if (!existing || new Date(item.startedAt) < new Date(existing.at)) {
+      byId.set(item.jobId, {
+        jobId: item.jobId,
+        userId: item.userId,
+        at: item.startedAt,
+        source: "processing",
+      });
+    }
+  }
+  return [...byId.values()]
+    .sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
+    .slice(0, limit);
 }
 
 export function fingerprintUpload(fileName: string, size: number) {

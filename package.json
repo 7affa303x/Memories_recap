@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "setup:creem": "node scripts/setup-creem.mjs"
   },
   "dependencies": {
@@ -43,6 +45,7 @@
     "eslint-config-next": "16.2.12",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vercel": "^57.0.0"
+    "vercel": "^57.0.0",
+    "vitest": "^3.2.7"
   }
 }

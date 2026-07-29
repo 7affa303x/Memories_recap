@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import { getOptionalUser } from "@/lib/session";
 import { signOutAction } from "@/app/actions/auth";
 import { Button } from "@/components/ui/button";
 import { GoogleSignInButton } from "@/components/google-sign-in-button";
+import { Logo } from "@/components/logo";
 import { BRAND_NAME, BRAND_TAGLINE } from "@/lib/brand";
 import { welcomeLine } from "@/lib/greeting";
 
@@ -25,7 +27,7 @@ export default async function LandingPage({
     <main className="min-h-full bg-[radial-gradient(1000px_520px_at_50%_-8%,#dcfce7,transparent),linear-gradient(180deg,#f8faf9_0%,#ffffff_42%,#f0fdf4_100%)]">
       <div className="mx-auto flex w-full max-w-lg flex-col px-6 pb-20 pt-8">
         <header className="flex items-center justify-between">
-          <span className="sr-only">{BRAND_NAME}</span>
+          <Logo />
           <div className="flex items-center gap-2">
             <a href="/pricing" className="min-h-11 px-2 text-sm text-neutral-500">
               Pricing
@@ -76,7 +78,11 @@ export default async function LandingPage({
                 <a href="/upload">Upload memories</a>
               </Button>
             ) : (
-              <GoogleSignInButton callbackUrl={callbackUrl} />
+              <GoogleSignInButton
+                callbackUrl={callbackUrl}
+                label="Continue with Google"
+                eventName="Lead"
+              />
             )}
           </div>
 
@@ -94,6 +100,44 @@ export default async function LandingPage({
               4. Watch, download, and share
             </li>
           </ol>
+        </section>
+
+        <section className="mt-16 space-y-4">
+          <h2 className="font-display text-2xl font-semibold tracking-tight text-neutral-900">
+            See a sample
+          </h2>
+          <p className="text-sm text-neutral-500">
+            End-card stills from a finished recap — landscape for the couch,
+            vertical for stories.{" "}
+            <a href="/examples" className="text-green-800 underline underline-offset-2">
+              More examples
+            </a>
+            {" · "}
+            <a href="/upload" className="text-green-800 underline underline-offset-2">
+              Try it with your own clips
+            </a>
+            .
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="overflow-hidden rounded-[16px] bg-neutral-900">
+              <Image
+                src="/brand/end-card-landscape.png"
+                alt="Sample landscape recap end card"
+                width={960}
+                height={540}
+                className="aspect-video w-full object-cover"
+              />
+            </div>
+            <div className="mx-auto w-full max-w-[220px] overflow-hidden rounded-[16px] bg-neutral-900 sm:mx-0 sm:max-w-none">
+              <Image
+                src="/brand/end-card-vertical.png"
+                alt="Sample vertical recap end card"
+                width={540}
+                height={960}
+                className="aspect-[9/16] w-full object-cover"
+              />
+            </div>
+          </div>
         </section>
 
         <section className="mt-16 space-y-4">
@@ -133,6 +177,27 @@ export default async function LandingPage({
 
         <section className="mt-16 space-y-4">
           <h2 className="font-display text-2xl font-semibold tracking-tight text-neutral-900">
+            Built on trust
+          </h2>
+          <p className="text-sm text-neutral-600">
+            Originals stay private. You choose when to share. Credits only
+            charge for what we process — and failed system jobs restore them.
+          </p>
+          {user ? (
+            <Button asChild className="h-12 w-full rounded-[16px] text-base">
+              <a href="/upload">Start a recap</a>
+            </Button>
+          ) : (
+            <GoogleSignInButton
+              callbackUrl={callbackUrl}
+              label="Continue with Google"
+              eventName="Lead"
+            />
+          )}
+        </section>
+
+        <section className="mt-16 space-y-4">
+          <h2 className="font-display text-2xl font-semibold tracking-tight text-neutral-900">
             FAQ
           </h2>
           <div className="space-y-3 text-sm text-neutral-600">
@@ -158,7 +223,8 @@ export default async function LandingPage({
                 Can I share the result?
               </summary>
               <p className="mt-2">
-                Yes. Create a public link with optional password and expiry.
+                Yes. Create a public link with optional password and expiry —
+                family mode requires a password.
               </p>
             </details>
           </div>
@@ -170,18 +236,27 @@ export default async function LandingPage({
               <a href="/upload">Start a recap</a>
             </Button>
           ) : (
-            <GoogleSignInButton callbackUrl={callbackUrl} label="Continue with Google" />
+            <GoogleSignInButton
+              callbackUrl={callbackUrl}
+              label="Continue with Google"
+              eventName="Lead"
+            />
           )}
-          <p className="mt-4 text-center text-xs text-neutral-400">
-            <a href="/privacy" className="underline">
-              Privacy
-            </a>{" "}
-            ·{" "}
-            <a href="/terms" className="underline">
+        </section>
+
+        <footer className="mt-16 border-t border-neutral-200 pt-8 text-center text-xs text-neutral-400">
+          <p className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2">
+            <a href="/terms" className="underline underline-offset-2">
               Terms
             </a>
+            <a href="/privacy" className="underline underline-offset-2">
+              Privacy
+            </a>
+            <a href="/support" className="underline underline-offset-2">
+              Support
+            </a>
           </p>
-        </section>
+        </footer>
       </div>
     </main>
   );

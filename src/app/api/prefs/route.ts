@@ -26,6 +26,18 @@ export async function PUT(request: Request) {
     defaultTrackId: (body.defaultTrackId as string | null) ?? undefined,
     defaultOutputQuality: (body.defaultOutputQuality as never) || undefined,
     lastFolder: (body.lastFolder as string | null) ?? undefined,
+    endCardTitle:
+      typeof body.endCardTitle === "string"
+        ? body.endCardTitle.slice(0, 80)
+        : body.endCardTitle === null
+          ? null
+          : undefined,
+    endCardShowDate:
+      typeof body.endCardShowDate === "boolean"
+        ? body.endCardShowDate
+        : undefined,
+    hideEndCard:
+      typeof body.hideEndCard === "boolean" ? body.hideEndCard : undefined,
   });
   return NextResponse.json(prefs);
 }

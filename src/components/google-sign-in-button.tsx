@@ -5,12 +5,28 @@ import { signIn } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { trackClientEvent } from "@/components/analytics-pixels";
 
+type AnalyticsEvent = "CompleteRegistration" | "Lead";
+
+function eventForLabel(
+  label: string,
+  eventName?: AnalyticsEvent
+): AnalyticsEvent {
+  if (eventName) return eventName;
+  if (/sign\s*up|create\s*(an\s*)?account|register|join/i.test(label)) {
+    return "CompleteRegistration";
+  }
+  return "Lead";
+}
+
 export function GoogleSignInButton({
   callbackUrl = "/upload",
-  label = "Upload memories",
+  label = "Continue with Google",
+  eventName,
 }: {
   callbackUrl?: string;
   label?: string;
+  /** Override analytics event. Defaults to Lead; SignUp-style labels use CompleteRegistration. */
+  eventName?: AnalyticsEvent;
 }) {
   const [pending, setPending] = useState(false);
 
@@ -21,7 +37,7 @@ export function GoogleSignInButton({
       disabled={pending}
       onClick={() => {
         setPending(true);
-        trackClientEvent("CompleteRegistration");
+        trackClientEvent(eventForLabel(label, eventName));
         void signIn("google", { callbackUrl }).finally(() => {
           setPending(false);
         });

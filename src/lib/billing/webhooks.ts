@@ -1,5 +1,6 @@
 import {
   grantCredits,
+  isWebhookProcessed,
   markWebhookProcessed,
   restoreCreditsForRefund,
   setCreemCustomerId,
@@ -44,14 +45,15 @@ function customerEmailFrom(value: unknown, fallback?: string | null) {
   return fallback || "unknown@memoryrecap.app";
 }
 
+/** Grant/apply first, then mark processed — never mark then fail grant. */
 async function withIdempotency(
   eventId: string,
   type: string,
   fn: () => Promise<void>
 ) {
-  const fresh = await markWebhookProcessed(eventId, type);
-  if (!fresh) return;
+  if (await isWebhookProcessed(eventId)) return;
   await fn();
+  await markWebhookProcessed(eventId, type);
 }
 
 export async function handleCheckoutCompleted(payload: {

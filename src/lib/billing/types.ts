@@ -51,10 +51,15 @@ export type BillingState = {
   userId: string;
   email: string;
   creemCustomerId: string | null;
-  /** @deprecated legacy fields for Storage migration */
+  /**
+   * @deprecated Compat only — older Storage JSON may still carry Polar/Paddle ids.
+   * Live MoR is Gumroad (primary) or Creem (fallback). Do not treat as active providers.
+   */
   paddleCustomerId?: string | null;
   polarCustomerId?: string | null;
   freeGranted: boolean;
+  /** True after any credit pack purchase — removes overlay watermark (end card kept). */
+  watermarkExempt?: boolean;
   /** YYYY-MM-DD UTC of last daily login credit grant */
   lastDailyLoginGrantAt?: string | null;
   lots: CreditLot[];

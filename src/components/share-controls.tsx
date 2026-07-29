@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type Props = {
   jobId: string;
@@ -15,8 +15,23 @@ export function ShareControls({ jobId, initialShareUrl = null }: Props) {
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [viewCount, setViewCount] = useState(0);
+
+  useEffect(() => {
+    fetch(`/api/jobs/${jobId}/share`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (j.url) setUrl(j.url);
+        if (typeof j.viewCount === "number") setViewCount(j.viewCount);
+      })
+      .catch(() => undefined);
+  }, [jobId]);
 
   async function createOrRefresh() {
+    if (audience === "family" && password.trim().length < 4) {
+      setError("Family shares need a password (at least 4 characters).");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -66,9 +81,14 @@ export function ShareControls({ jobId, initialShareUrl = null }: Props) {
     <div className="mt-8 space-y-4 border-t border-neutral-200 pt-6">
       <h2 className="text-xl font-medium tracking-tight text-neutral-900">Share</h2>
       <p className="text-sm text-neutral-500">
-        Public link with a hard-to-guess token. Family mode is for close people
-        — password recommended.
+        Public link with a hard-to-guess token. Family mode requires a password
+        so only close people can watch.
       </p>
+      {url && viewCount > 0 ? (
+        <p className="text-sm text-neutral-600">
+          {viewCount} {viewCount === 1 ? "view" : "views"} so far
+        </p>
+      ) : null}
 
       <div className="grid grid-cols-2 gap-2">
         {(
@@ -98,9 +118,13 @@ export function ShareControls({ jobId, initialShareUrl = null }: Props) {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder={
-            audience === "family" ? "Password (recommended)" : "Optional password"
+            audience === "family"
+              ? "Password (required, min 4)"
+              : "Optional password"
           }
           className="h-11 flex-1 rounded-[12px] border border-neutral-200 bg-white px-3 text-sm outline-none focus:border-green-600"
+          minLength={audience === "family" ? 4 : undefined}
+          required={audience === "family"}
         />
         <input
           type="number"

@@ -7,14 +7,7 @@ import {
   getProductId,
 } from "@/lib/billing/config";
 import { buildGumroadCheckoutUrl } from "@/lib/billing/gumroad";
-import type { ProductKey } from "@/lib/billing/types";
-
-const ALLOWED: ProductKey[] = [
-  "subscription",
-  "credits_small",
-  "credits_medium",
-  "credits_large",
-];
+import { checkoutCreateBodySchema, parseOr400 } from "@/lib/validation";
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -22,11 +15,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const body = (await request.json()) as { product?: string };
-  const product = body.product as ProductKey | undefined;
-  if (!product || !ALLOWED.includes(product)) {
-    return NextResponse.json({ error: "Invalid product" }, { status: 400 });
+  const raw = await request.json().catch(() => ({}));
+  const parsed = parseOr400(checkoutCreateBodySchema, raw);
+  if (!parsed.ok) {
+    return NextResponse.json(
+      { error: parsed.error, details: parsed.details },
+      { status: 400 }
+    );
   }
+  const product = parsed.data.product;
 
   const provider = getBillingProvider();
 

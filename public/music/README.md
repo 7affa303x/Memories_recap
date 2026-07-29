@@ -1,8 +1,13 @@
 # Music catalog
 
+## Temporary beds — replace before commercial launch
+Files in this folder are **temporary algorithmic beds** (SoundHelix examples)
+for development and early testing only. They **must be replaced with properly
+licensed tracks** (Uppbeat / Epidemic Sound / Pixabay or equivalent) before
+commercial launch. Do not ship these beds as the production library.
+
 ## Active now
 Free algorithmic beds in this folder (SoundHelix examples, temporary).
-Replace with curated royalty-free tracks from Uppbeat / Epidemic / Pixabay before launch polish.
 
 ## Paid library (hidden)
 Set `MUSIC_PAID_ENABLED=true` and populate `PAID_MUSIC_TRACKS` in `src/lib/music.ts`

@@ -15,6 +15,8 @@ import {
 import { creditsForBytes } from "@/lib/billing/config";
 import { clientKey, rateLimit } from "@/lib/rate-limit";
 import { logError } from "@/lib/logger";
+import { softLimitDurationMessage } from "@/lib/types";
+import { jobProcessBodySchema, parseOr400 } from "@/lib/validation";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -67,18 +69,21 @@ export async function POST(request: Request, { params }: Params) {
     return NextResponse.json({ error: "Upload videos first" }, { status: 400 });
   }
 
-  let body: {
-    musicMode?: "none" | "manual" | "auto";
-    trackId?: string | null;
-    mood?: "joyful" | "nostalgic" | "chill" | "epic" | null;
-    outputQuality?: "fhd" | "uhd" | null;
-    folder?: string | null;
-  } = {};
-  try {
-    body = (await request.json()) as typeof body;
-  } catch {
-    body = {};
+  const rawBody = await request.json().catch(() => ({}));
+  const parsed = parseOr400(jobProcessBodySchema, rawBody);
+  if (!parsed.ok) {
+    return NextResponse.json(
+      { error: parsed.error, details: parsed.details },
+      { status: 400 }
+    );
   }
+  const body = parsed.data;
+
+  const allowedMax = new Set([20, 45, 90]);
+  const maxSeconds =
+    typeof body.maxSeconds === "number" && allowedMax.has(body.maxSeconds)
+      ? body.maxSeconds
+      : null;
 
   await updateJob(jobId, userId, {
     recap_options: {
@@ -87,6 +92,13 @@ export async function POST(request: Request, { params }: Params) {
       mood: body.mood || "joyful",
       outputQuality: body.outputQuality === "uhd" ? "uhd" : "fhd",
       folder: body.folder || null,
+      maxSeconds,
+      endCardTitle:
+        typeof body.endCardTitle === "string"
+          ? body.endCardTitle.slice(0, 80)
+          : null,
+      endCardShowDate: Boolean(body.endCardShowDate),
+      hideEndCard: Boolean(body.hideEndCard),
     },
     folder: body.folder || null,
   });
@@ -161,5 +173,9 @@ export async function POST(request: Request, { params }: Params) {
     ok: true,
     status: "queued",
     creditsCharged: amount,
+    softLimitWarning: softLimitDurationMessage(
+      job.eta_seconds ||
+        Math.max(60, Math.round((job.total_bytes || 0) / (1024 * 1024) * 2.2))
+    ),
   });
 }

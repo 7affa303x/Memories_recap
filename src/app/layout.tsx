@@ -4,6 +4,7 @@ import "./globals.css";
 import { cn } from "@/lib/utils";
 import { AuthProvider } from "@/components/auth-provider";
 import { AnalyticsPixels } from "@/components/analytics-pixels";
+import { CookieBanner } from "@/components/cookie-banner";
 import { BRAND_NAME, BRAND_TAGLINE, BRAND_SHORT } from "@/lib/brand";
 
 const manrope = Manrope({
@@ -32,6 +33,11 @@ export const metadata: Metadata = {
     template: `%s · ${BRAND_NAME}`,
   },
   description: BRAND_SHORT,
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [{ url: "/favicon.ico" }],
+    apple: [{ url: "/brand/logo-mark.png" }],
+  },
   openGraph: {
     title: BRAND_NAME,
     description: "Upload → pay → wait → receive a beautiful recap.",
@@ -66,6 +72,7 @@ export default function RootLayout({
         <AuthProvider>
           <AnalyticsPixels />
           {children}
+          <CookieBanner />
         </AuthProvider>
       </body>
     </html>

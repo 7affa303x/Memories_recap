@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
+import Link from "next/link";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
+
+const SHARE_PWD_KEY = (token: string) => `share-pwd:${token}`;
 
 export default function PublicSharePage({
   params,
@@ -25,14 +28,26 @@ export default function PublicSharePage({
 
   useEffect(() => {
     if (!token) return;
-    void load();
+    let saved: string | undefined;
+    try {
+      saved = sessionStorage.getItem(SHARE_PWD_KEY(token)) || undefined;
+    } catch {
+      saved = undefined;
+    }
+    if (saved) setPassword(saved);
+    void load(saved);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   async function load(pwd?: string) {
     setError(null);
-    const q = pwd ? `?password=${encodeURIComponent(pwd)}` : "";
-    const res = await fetch(`/api/share/${token}${q}`, { cache: "no-store" });
+    const hasPwd = Boolean(pwd && pwd.length > 0);
+    const res = await fetch(`/api/share/${token}`, {
+      method: hasPwd ? "POST" : "GET",
+      cache: "no-store",
+      headers: hasPwd ? { "Content-Type": "application/json" } : undefined,
+      body: hasPwd ? JSON.stringify({ password: pwd }) : undefined,
+    });
     const json = await res.json();
     if (res.status === 401 && json.passwordRequired) {
       setNeedsPassword(true);
@@ -42,12 +57,24 @@ export default function PublicSharePage({
       setError(json.error || "This link is unavailable");
       return;
     }
+    if (pwd) {
+      try {
+        sessionStorage.setItem(SHARE_PWD_KEY(token), pwd);
+      } catch {
+        /* ignore */
+      }
+    }
     setNeedsPassword(false);
     setData({
       title: json.title,
       landscapeUrl: json.landscapeUrl,
       verticalUrl: json.verticalUrl,
     });
+  }
+
+  function onUnlock(e: FormEvent) {
+    e.preventDefault();
+    void load(password);
   }
 
   return (
@@ -65,22 +92,25 @@ export default function PublicSharePage({
         </div>
 
         {needsPassword && !data ? (
-          <div className="space-y-3 rounded-[16px] bg-neutral-50 p-4">
-            <p className="text-sm text-neutral-600">This link is password protected.</p>
+          <form
+            onSubmit={onUnlock}
+            className="space-y-3 rounded-[16px] bg-neutral-50 p-4"
+          >
+            <p className="text-sm text-neutral-600">
+              This link is password protected.
+            </p>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="h-11 w-full rounded-[12px] border border-neutral-200 bg-white px-3 text-sm"
               placeholder="Password"
+              autoComplete="current-password"
             />
-            <Button
-              className="h-11 w-full rounded-[16px]"
-              onClick={() => load(password)}
-            >
+            <Button type="submit" className="h-11 w-full rounded-[16px]">
               Unlock
             </Button>
-          </div>
+          </form>
         ) : null}
 
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
@@ -123,6 +153,12 @@ export default function PublicSharePage({
             </div>
           </>
         ) : null}
+
+        <div className="border-t border-neutral-200 pt-6">
+          <Button asChild className="h-12 w-full rounded-[16px] text-base">
+            <Link href="/">Make your own recap</Link>
+          </Button>
+        </div>
       </section>
     </main>
   );

@@ -84,6 +84,7 @@ export async function POST(request: Request, { params }: Params) {
           ? "uhd"
           : job.recap_options?.outputQuality || "fhd",
       folder: job.folder || job.recap_options?.folder || null,
+      maxSeconds: job.recap_options?.maxSeconds ?? null,
     },
   });
   await enqueueJob(jobId, userId);

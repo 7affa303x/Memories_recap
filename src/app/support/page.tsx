@@ -52,12 +52,22 @@ export default async function SupportPage() {
             <li>Check Billing → credits balance</li>
             <li>Open the job from Dashboard for status/errors</li>
             <li>Try Remix with another mood if the cut feels off</li>
+            <li>
+              Export or delete your account anytime from{" "}
+              <Link href="/account" className="text-green-700 underline">
+                Account
+              </Link>
+            </li>
           </ul>
         </div>
 
         <p className="text-sm text-neutral-500">
           {BRAND_NAME} is built to keep your memories watchable — not to trap
-          you with dark patterns.
+          you with dark patterns. Legal entity (LLC) details will be listed on{" "}
+          <Link href="/company" className="text-green-700 underline">
+            About / Company
+          </Link>{" "}
+          upon formation.
         </p>
       </section>
     </main>

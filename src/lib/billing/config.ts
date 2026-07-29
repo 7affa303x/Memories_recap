@@ -53,8 +53,9 @@ export function getBillingProvider(): "gumroad" | "creem" {
 }
 
 export const FREE_CREDITS = numberEnv("FREE_CREDITS", 200);
-export const DAILY_LOGIN_CREDITS = numberEnv("DAILY_LOGIN_CREDITS", 50);
-export const DAILY_LOGIN_BALANCE_CAP = numberEnv("DAILY_LOGIN_BALANCE_CAP", 500);
+/** Daily login top-up when balance is low. */
+export const DAILY_LOGIN_CREDITS = numberEnv("DAILY_LOGIN_CREDITS", 30);
+export const DAILY_LOGIN_BALANCE_CAP = numberEnv("DAILY_LOGIN_BALANCE_CAP", 300);
 export const CREDIT_EXPIRY_DAYS = numberEnv("CREDIT_EXPIRY_DAYS", 90);
 export const MIN_JOB_CREDITS = numberEnv("MIN_JOB_CREDITS", 10);
 

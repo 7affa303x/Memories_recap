@@ -35,6 +35,14 @@ export async function probeDuration(bin: string, file: string) {
   );
 }
 
+/** Best-effort width/height from ffmpeg -i stderr. */
+export async function probeVideoSize(bin: string, file: string) {
+  const { stderr } = await runCapture(bin, ["-i", file]);
+  const match = stderr.match(/Video:.*?\s(\d{2,5})x(\d{2,5})/);
+  if (!match) return { width: 0, height: 0 };
+  return { width: Number(match[1]), height: Number(match[2]) };
+}
+
 async function extractFrame(
   bin: string,
   file: string,

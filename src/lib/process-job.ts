@@ -7,8 +7,9 @@ import { getServiceSupabase, signedRecapUrl } from "@/lib/supabase/admin";
 import { downloadSourceToFile } from "@/lib/source-download";
 import {
   appendJobLog,
+  clearProcessingClaim,
   dequeueJob,
-  ensureShareLink,
+  enqueueProcessingClaim,
   getJobForUser,
   listUploads,
   updateJob,
@@ -16,6 +17,7 @@ import {
 } from "@/lib/store";
 import {
   probeDuration,
+  probeVideoSize,
   selectBestClips,
   writeConcatList,
 } from "@/lib/smart-select";
@@ -24,6 +26,7 @@ import {
   END_CARD_SECONDS,
   endCardImagePath,
   renderSizes,
+  resolveBundledFont,
   watermarkOverlayFilter,
   watermarkOverlayPath,
   type OutputQuality,
@@ -35,6 +38,7 @@ import {
   type MusicMode,
 } from "@/lib/music";
 import { getBillingSummary } from "@/lib/billing/credits";
+import { getUserPrefs } from "@/lib/user-prefs";
 import { logError, logInfo } from "@/lib/logger";
 import type { RecapOptions } from "@/lib/types";
 
@@ -70,10 +74,32 @@ async function makeEndCardClip(
   bin: string,
   orientation: "landscape" | "vertical",
   outPath: string,
-  size: { w: number; h: number }
+  size: { w: number; h: number },
+  opts?: { title?: string | null; showDate?: boolean }
 ) {
   const image = endCardImagePath(orientation);
   const dim = `${size.w}:${size.h}`;
+  const font = resolveBundledFont();
+  const lines: string[] = [];
+  if (opts?.title?.trim()) lines.push(opts.title.trim().slice(0, 48));
+  if (opts?.showDate) {
+    lines.push(
+      new Date().toLocaleDateString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      })
+    );
+  }
+  let vf = `scale=${dim}:force_original_aspect_ratio=decrease,pad=${dim}:(ow-iw)/2:(oh-ih)/2,format=yuv420p`;
+  if (font && lines.length > 0) {
+    const escapedFont = font.replace(/\\/g, "/").replace(/:/g, "\\:");
+    const escaped = lines
+      .map((l) => l.replace(/\\/g, "\\\\").replace(/:/g, "\\:").replace(/'/g, "\\'"))
+      .join("\\n");
+    const fontSize = Math.max(28, Math.round(size.w * 0.028));
+    vf += `,drawtext=fontfile='${escapedFont}':text='${escaped}':fontsize=${fontSize}:fontcolor=white:borderw=2:bordercolor=black@0.35:x=(w-text_w)/2:y=h*0.78`;
+  }
   await run(bin, [
     "-y",
     "-loop",
@@ -87,7 +113,7 @@ async function makeEndCardClip(
     "-t",
     String(END_CARD_SECONDS),
     "-vf",
-    `scale=${dim}:force_original_aspect_ratio=decrease,pad=${dim}:(ow-iw)/2:(oh-ih)/2,format=yuv420p`,
+    vf,
     "-c:v",
     "libx264",
     "-preset",
@@ -108,6 +134,7 @@ export async function processJob(jobId: string, userId: string) {
   if (!bin) throw new Error("ffmpeg binary missing");
 
   const started = Date.now();
+  await enqueueProcessingClaim(jobId, userId).catch(() => undefined);
   await appendJobLog(userId, jobId, "process_start");
   logInfo("process_start", { jobId, userId });
 
@@ -126,23 +153,46 @@ export async function processJob(jobId: string, userId: string) {
   });
 
   let isPro = false;
+  let watermarkExempt = false;
   try {
     const summary = await getBillingSummary(userId, job?.notify_email || "");
     isPro = Boolean(
       summary.subscription &&
         ["active", "trialing"].includes(summary.subscription.status)
     );
+    watermarkExempt = Boolean(summary.watermarkExempt);
   } catch {
     isPro = false;
+    watermarkExempt = false;
+  }
+  const skipOverlayWatermark = isPro || watermarkExempt;
+
+  let prefsEndTitle: string | null = null;
+  let prefsShowDate = false;
+  let prefsHideEnd = false;
+  try {
+    const prefs = await getUserPrefs(userId);
+    prefsEndTitle = prefs.endCardTitle;
+    prefsShowDate = prefs.endCardShowDate;
+    prefsHideEnd = prefs.hideEndCard;
+  } catch {
+    /* defaults */
   }
 
-  const outputQuality: OutputQuality =
+  const endCardTitle =
+    options.endCardTitle?.trim() || prefsEndTitle?.trim() || null;
+  const endCardShowDate = Boolean(
+    options.endCardShowDate ?? prefsShowDate
+  );
+  const hideEndCard = Boolean(isPro && (options.hideEndCard ?? prefsHideEnd));
+
+  let outputQuality: OutputQuality =
     isPro && options.outputQuality === "uhd" ? "uhd" : "fhd";
-  const sizes = renderSizes(outputQuality);
-  const lw = sizes.landscape.w;
-  const lh = sizes.landscape.h;
-  const vw = sizes.vertical.w;
-  const vh = sizes.vertical.h;
+  let sizes = renderSizes(outputQuality);
+  let lw = sizes.landscape.w;
+  let lh = sizes.landscape.h;
+  let vw = sizes.vertical.w;
+  let vh = sizes.vertical.h;
 
   const uploads = await listUploads(jobId, userId);
   if (uploads.length === 0) {
@@ -152,6 +202,7 @@ export async function processJob(jobId: string, userId: string) {
       progress: 100,
       error: "No videos uploaded",
     });
+    await clearProcessingClaim(jobId).catch(() => undefined);
     throw new Error("No videos uploaded");
   }
 
@@ -168,10 +219,17 @@ export async function processJob(jobId: string, userId: string) {
     });
 
     const localFiles: { path: string; duration: number }[] = [];
+    let maxSourceEdge = 0;
     for (const [index, upload] of uploads.entries()) {
       const dest = join(workDir, `src-${index}.mp4`);
       await downloadToFile(upload.storage_path, dest);
       const duration = await probeDuration(bin, dest);
+      const size = await probeVideoSize(bin, dest);
+      maxSourceEdge = Math.max(
+        maxSourceEdge,
+        size.width || 0,
+        size.height || 0
+      );
       localFiles.push({ path: dest, duration });
       await updateJob(jobId, userId, {
         progress: 8 + Math.round(((index + 1) / uploads.length) * 18),
@@ -180,7 +238,24 @@ export async function processJob(jobId: string, userId: string) {
       await appendJobLog(userId, jobId, "downloaded_source", {
         index,
         duration,
+        width: size.width,
+        height: size.height,
       });
+    }
+
+    // 4K only when at least one source is near-UHD (≥1440 on the long edge)
+    if (outputQuality === "uhd" && maxSourceEdge > 0 && maxSourceEdge < 1440) {
+      outputQuality = "fhd";
+      sizes = renderSizes(outputQuality);
+      lw = sizes.landscape.w;
+      lh = sizes.landscape.h;
+      vw = sizes.vertical.w;
+      vh = sizes.vertical.h;
+      await appendJobLog(userId, jobId, "uhd_downgraded", {
+        maxSourceEdge,
+        reason: "sources_below_1440p",
+      });
+      logInfo("uhd_downgraded", { jobId, maxSourceEdge });
     }
 
     await updateJob(jobId, userId, {
@@ -196,6 +271,7 @@ export async function processJob(jobId: string, userId: string) {
       files: localFiles,
       mood: mood.id,
       visionTier: isPro ? "pro" : "free",
+      maxSeconds: options.maxSeconds ?? undefined,
     });
     await appendJobLog(userId, jobId, "clips_selected", {
       count: picks.length,
@@ -359,17 +435,27 @@ export async function processJob(jobId: string, userId: string) {
 
     const endLandscape = join(workDir, "end-landscape.mp4");
     const endVertical = join(workDir, "end-vertical.mp4");
-    await makeEndCardClip(bin, "landscape", endLandscape, sizes.landscape);
-    await makeEndCardClip(bin, "vertical", endVertical, sizes.vertical);
+    if (!hideEndCard) {
+      await makeEndCardClip(bin, "landscape", endLandscape, sizes.landscape, {
+        title: endCardTitle,
+        showDate: endCardShowDate,
+      });
+      await makeEndCardClip(bin, "vertical", endVertical, sizes.vertical, {
+        title: endCardTitle,
+        showDate: endCardShowDate,
+      });
+    }
 
     const landscapeBody = join(workDir, "landscape-body.mp4");
-    if (isPro) {
+    if (skipOverlayWatermark) {
       await run(bin, [
         "-y",
         "-i",
         withAudio,
         "-vf",
         "format=yuv420p",
+        "-af",
+        "loudnorm=I=-16:TP=-1.5:LRA=11",
         "-c:v",
         "libx264",
         "-preset",
@@ -391,6 +477,8 @@ export async function processJob(jobId: string, userId: string) {
         watermarkOverlayPath(),
         "-filter_complex",
         watermarkOverlayFilter(lw),
+        "-af",
+        "loudnorm=I=-16:TP=-1.5:LRA=11",
         "-c:v",
         "libx264",
         "-preset",
@@ -405,22 +493,19 @@ export async function processJob(jobId: string, userId: string) {
       ]);
     }
 
-    const landscapeList = join(workDir, "landscape-final.txt");
-    await writeConcatList(landscapeList, [landscapeBody, endLandscape]);
     const landscapeLocal = join(workDir, "landscape.mp4");
-    await run(bin, [
-      "-y",
-      "-f",
-      "concat",
-      "-safe",
-      "0",
-      "-i",
-      landscapeList,
-      "-c",
-      "copy",
-      landscapeLocal,
-    ]).catch(async () => {
-      // Re-encode concat if codecs mismatch
+    if (hideEndCard) {
+      await run(bin, [
+        "-y",
+        "-i",
+        landscapeBody,
+        "-c",
+        "copy",
+        landscapeLocal,
+      ]);
+    } else {
+      const landscapeList = join(workDir, "landscape-final.txt");
+      await writeConcatList(landscapeList, [landscapeBody, endLandscape]);
       await run(bin, [
         "-y",
         "-f",
@@ -429,30 +514,46 @@ export async function processJob(jobId: string, userId: string) {
         "0",
         "-i",
         landscapeList,
-        "-c:v",
-        "libx264",
-        "-preset",
-        "veryfast",
-        "-crf",
-        "22",
-        "-c:a",
-        "aac",
-        "-movflags",
-        "+faststart",
+        "-c",
+        "copy",
         landscapeLocal,
-      ]);
-    });
+      ]).catch(async () => {
+        // Re-encode concat if codecs mismatch
+        await run(bin, [
+          "-y",
+          "-f",
+          "concat",
+          "-safe",
+          "0",
+          "-i",
+          landscapeList,
+          "-c:v",
+          "libx264",
+          "-preset",
+          "veryfast",
+          "-crf",
+          "22",
+          "-c:a",
+          "aac",
+          "-movflags",
+          "+faststart",
+          landscapeLocal,
+        ]);
+      });
+    }
 
     const verticalBody = join(workDir, "vertical-body.mp4");
     // Face-biased vertical crop: prefer upper third (people usually higher in frame)
     const verticalBase = `scale=${vw}:${vh}:force_original_aspect_ratio=increase,crop=${vw}:${vh}:(iw-ow)/2:(ih-oh)*0.22`;
-    if (isPro) {
+    if (skipOverlayWatermark) {
       await run(bin, [
         "-y",
         "-i",
         withAudio,
         "-vf",
         `${verticalBase},format=yuv420p`,
+        "-af",
+        "loudnorm=I=-16:TP=-1.5:LRA=11",
         "-c:v",
         "libx264",
         "-preset",
@@ -474,6 +575,8 @@ export async function processJob(jobId: string, userId: string) {
         watermarkOverlayPath(),
         "-filter_complex",
         `[0:v]${verticalBase}[base];[1:v]scale=${vw}:-1[wm];[base][wm]overlay=(W-w)/2:H*0.33-h/2,format=yuv420p`,
+        "-af",
+        "loudnorm=I=-16:TP=-1.5:LRA=11",
         "-c:v",
         "libx264",
         "-preset",
@@ -488,21 +591,12 @@ export async function processJob(jobId: string, userId: string) {
       ]);
     }
 
-    const verticalList = join(workDir, "vertical-final.txt");
-    await writeConcatList(verticalList, [verticalBody, endVertical]);
     const verticalLocal = join(workDir, "vertical.mp4");
-    await run(bin, [
-      "-y",
-      "-f",
-      "concat",
-      "-safe",
-      "0",
-      "-i",
-      verticalList,
-      "-c",
-      "copy",
-      verticalLocal,
-    ]).catch(async () => {
+    if (hideEndCard) {
+      await run(bin, ["-y", "-i", verticalBody, "-c", "copy", verticalLocal]);
+    } else {
+      const verticalList = join(workDir, "vertical-final.txt");
+      await writeConcatList(verticalList, [verticalBody, endVertical]);
       await run(bin, [
         "-y",
         "-f",
@@ -511,19 +605,32 @@ export async function processJob(jobId: string, userId: string) {
         "0",
         "-i",
         verticalList,
-        "-c:v",
-        "libx264",
-        "-preset",
-        "veryfast",
-        "-crf",
-        "22",
-        "-c:a",
-        "aac",
-        "-movflags",
-        "+faststart",
+        "-c",
+        "copy",
         verticalLocal,
-      ]);
-    });
+      ]).catch(async () => {
+        await run(bin, [
+          "-y",
+          "-f",
+          "concat",
+          "-safe",
+          "0",
+          "-i",
+          verticalList,
+          "-c:v",
+          "libx264",
+          "-preset",
+          "veryfast",
+          "-crf",
+          "22",
+          "-c:a",
+          "aac",
+          "-movflags",
+          "+faststart",
+          verticalLocal,
+        ]);
+      });
+    }
 
     const supabase = getServiceSupabase();
     const generation = (job?.recap_generation || 0) + 1;
@@ -532,10 +639,31 @@ export async function processJob(jobId: string, userId: string) {
     const highlightsPath = `outputs/${userId}/${jobId}/v${generation}/highlights.mp4`;
     const storyPath = `outputs/${userId}/${jobId}/v${generation}/story.mp4`;
     const tiktokPath = `outputs/${userId}/${jobId}/v${generation}/tiktok.mp4`;
+    const previewPath = `outputs/${userId}/${jobId}/v${generation}/preview-6s.mp4`;
 
     // Platform-oriented vertical copies (safe margins for Stories / TikTok)
     const storyLocal = join(workDir, "story.mp4");
     const tiktokLocal = join(workDir, "tiktok.mp4");
+    const previewLocal = join(workDir, "preview-6s.mp4");
+    await run(bin, [
+      "-y",
+      "-i",
+      landscapeLocal,
+      "-t",
+      "6",
+      "-vf",
+      "scale=960:-2,format=yuv420p",
+      "-c:v",
+      "libx264",
+      "-preset",
+      "veryfast",
+      "-crf",
+      "28",
+      "-an",
+      "-movflags",
+      "+faststart",
+      previewLocal,
+    ]).catch(() => undefined);
     await run(bin, [
       "-y",
       "-i",
@@ -573,39 +701,111 @@ export async function processJob(jobId: string, userId: string) {
       tiktokLocal,
     ]);
 
-    // Pro highlights: shorter cut of strongest moments (first ~40% of timeline)
+    // Pro highlights: concat highest-score clips totaling ~40% duration
+    // (not a naive trim of the first 40% of the full timeline).
     let highlightsLocal: string | null = null;
     if (isPro) {
       highlightsLocal = join(workDir, "highlights.mp4");
-      const fullDur = await probeDuration(bin, landscapeLocal);
-      const highlightDur = Math.max(6, Math.min(24, fullDur * 0.4));
-      await run(bin, [
-        "-y",
-        "-i",
-        landscapeLocal,
-        "-t",
-        highlightDur.toFixed(2),
-        "-c",
-        "copy",
-        highlightsLocal,
-      ]).catch(async () => {
+      const builtFromPicks =
+        picks.length > 0 &&
+        clipPaths.length === picks.length &&
+        (await (async () => {
+          const totalDur = picks.reduce((sum, p) => sum + p.duration, 0);
+          const targetDur = Math.max(6, Math.min(24, totalDur * 0.4));
+          const ranked = picks
+            .map((pick, index) => ({
+              pick,
+              path: clipPaths[index]!,
+              index,
+            }))
+            .sort((a, b) => b.pick.score - a.pick.score);
+
+          // Prefer duration budget; fall back to top half by score count.
+          const chosen: typeof ranked = [];
+          let acc = 0;
+          for (const item of ranked) {
+            if (chosen.length > 0 && acc >= targetDur) break;
+            chosen.push(item);
+            acc += item.pick.duration;
+          }
+          if (chosen.length === 0) {
+            const half = Math.max(1, Math.ceil(ranked.length / 2));
+            chosen.push(...ranked.slice(0, half));
+          }
+
+          // Keep original timeline order for a natural watch
+          chosen.sort((a, b) => a.index - b.index);
+          const hlList = join(workDir, "highlights-concat.txt");
+          await writeConcatList(
+            hlList,
+            chosen.map((c) => c.path)
+          );
+
+          try {
+            await run(bin, [
+              "-y",
+              "-f",
+              "concat",
+              "-safe",
+              "0",
+              "-i",
+              hlList,
+              "-vf",
+              `scale=${lw}:${lh}:force_original_aspect_ratio=decrease,pad=${lw}:${lh}:(ow-iw)/2:(oh-ih)/2,fps=30,format=yuv420p`,
+              "-c:v",
+              "libx264",
+              "-preset",
+              "veryfast",
+              "-crf",
+              "23",
+              "-c:a",
+              "aac",
+              "-ac",
+              "2",
+              "-ar",
+              "44100",
+              "-movflags",
+              "+faststart",
+              highlightsLocal!,
+            ]);
+            return true;
+          } catch {
+            // Fall through to landscape trim fallback
+            return false;
+          }
+        })());
+
+      if (!builtFromPicks) {
+        const fullDur = await probeDuration(bin, landscapeLocal);
+        const highlightDur = Math.max(6, Math.min(24, fullDur * 0.4));
         await run(bin, [
           "-y",
           "-i",
           landscapeLocal,
           "-t",
           highlightDur.toFixed(2),
-          "-c:v",
-          "libx264",
-          "-preset",
-          "veryfast",
-          "-crf",
-          "23",
-          "-c:a",
-          "aac",
-          highlightsLocal!,
-        ]);
-      });
+          "-c",
+          "copy",
+          highlightsLocal,
+        ]).catch(async () => {
+          await run(bin, [
+            "-y",
+            "-i",
+            landscapeLocal,
+            "-t",
+            highlightDur.toFixed(2),
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "23",
+            "-c:a",
+            "aac",
+            highlightsLocal!,
+          ]);
+        });
+      }
     }
 
     const landscapeBytes = await readFile(landscapeLocal);
@@ -621,6 +821,11 @@ export async function processJob(jobId: string, userId: string) {
     ];
     if (highlightsLocal) {
       uploadsOut.push([highlightsPath, await readFile(highlightsLocal)]);
+    }
+    let previewUploaded: string | null = null;
+    if (await fileExists(previewLocal)) {
+      uploadsOut.push([previewPath, await readFile(previewLocal)]);
+      previewUploaded = previewPath;
     }
     for (const [path, bytes] of uploadsOut) {
       const up = await supabase.storage.from("memories").upload(path, bytes, {
@@ -640,15 +845,14 @@ export async function processJob(jobId: string, userId: string) {
       highlightsPath: highlightsLocal ? highlightsPath : null,
       storyPath,
       tiktokPath,
+      previewPath: previewUploaded,
       durationSeconds: duration,
       mood: mood.id,
       ttlDays: isPro ? RECAP_TTL_DAYS_PRO : RECAP_TTL_DAYS,
       generation,
     });
 
-    await ensureShareLink(jobId, userId, {
-      expiresInDays: isPro ? 90 : 14,
-    });
+    // Share links are opt-in from the result page (ShareControls), not auto-created.
 
     await updateJob(jobId, userId, {
       status: "completed",
@@ -708,6 +912,7 @@ export async function processJob(jobId: string, userId: string) {
     await dequeueJob(jobId).catch(() => undefined);
     throw error;
   } finally {
+    await clearProcessingClaim(jobId).catch(() => undefined);
     await rm(workDir, { recursive: true, force: true }).catch(() => undefined);
   }
 }

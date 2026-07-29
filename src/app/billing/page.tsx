@@ -62,7 +62,10 @@ export default async function BillingPage({
 
   return (
     <main className="mx-auto flex min-h-full w-full max-w-lg flex-col px-6 pb-16 pt-8">
-      <CheckoutSuccessBeacon active={params.checkout === "success"} />
+      <CheckoutSuccessBeacon
+        active={params.checkout === "success"}
+        initialBalance={summary.balance}
+      />
       <AppHeader active="billing" />
 
       <section className="mt-10 space-y-6">
@@ -76,7 +79,8 @@ export default async function BillingPage({
         {params.checkout === "success" ? (
           <p className="rounded-[16px] bg-green-50 px-4 py-3 text-sm text-green-800">
             Payment received. Credits usually appear within a few seconds after
-            webhook confirmation.
+            webhook confirmation — we&apos;ll refresh the balance above when
+            they land.
           </p>
         ) : null}
 
@@ -102,8 +106,7 @@ export default async function BillingPage({
           </p>
           {"dailyLoginAmount" in summary && summary.dailyLoginAmount ? (
             <p className="mt-2 text-sm text-neutral-500">
-              Daily login: +{summary.dailyLoginAmount} credits when balance ≤{" "}
-              {summary.dailyLoginCap}
+              Occasional top-up when balance is low
               {summary.dailyLoginGrantedToday ? " · credited today" : ""}.
             </p>
           ) : null}

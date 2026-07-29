@@ -12,7 +12,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { estimateProcessingSeconds, formatBytes } from "@/lib/types";
+import { estimateProcessingSeconds, formatBytes, softLimitDurationMessage } from "@/lib/types";
 import {
   formatLimitHint,
   isLikelyVideoFile,
@@ -28,7 +28,18 @@ type LocalFile = {
   status: "queued" | "uploading" | "done" | "error";
   uploadId?: string;
   error?: string;
+  durationSeconds?: number | null;
 };
+
+function formatClipDuration(seconds: number) {
+  if (!Number.isFinite(seconds) || seconds < 0) return "";
+  const s = Math.round(seconds);
+  const m = Math.floor(s / 60);
+  const rem = s % 60;
+  return m > 0
+    ? `${m}:${String(rem).padStart(2, "0")}`
+    : `0:${String(rem).padStart(2, "0")}`;
+}
 
 function createId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -151,7 +162,12 @@ export function UploadWorkspace({
   const [dailyNote, setDailyNote] = useState<string | null>(null);
   const [folder, setFolder] = useState("");
   const [isPro, setIsPro] = useState(false);
+  const [completedRecaps, setCompletedRecaps] = useState(0);
   const [outputQuality, setOutputQuality] = useState<"fhd" | "uhd">("fhd");
+  const [maxSeconds, setMaxSeconds] = useState<number | null>(null);
+  const [endCardTitle, setEndCardTitle] = useState("");
+  const [endCardShowDate, setEndCardShowDate] = useState(false);
+  const [hideEndCard, setHideEndCard] = useState(false);
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [musicPlaying, setMusicPlaying] = useState(false);
 
@@ -165,6 +181,16 @@ export function UploadWorkspace({
         }
         const status = j.subscription?.status as string | undefined;
         setIsPro(status === "active" || status === "trialing");
+      })
+      .catch(() => undefined);
+    fetch("/api/jobs")
+      .then((r) => r.json())
+      .then((j) => {
+        const list = Array.isArray(j.jobs) ? j.jobs : Array.isArray(j) ? j : [];
+        setCompletedRecaps(
+          list.filter((job: { status?: string }) => job.status === "completed")
+            .length
+        );
       })
       .catch(() => undefined);
     fetch("/api/music")
@@ -183,6 +209,10 @@ export function UploadWorkspace({
         if (p.defaultTrackId) setTrackId(p.defaultTrackId);
         if (p.defaultOutputQuality) setOutputQuality(p.defaultOutputQuality);
         if (p.lastFolder) setFolder(p.lastFolder);
+        if (typeof p.endCardTitle === "string") setEndCardTitle(p.endCardTitle);
+        if (typeof p.endCardShowDate === "boolean")
+          setEndCardShowDate(p.endCardShowDate);
+        if (typeof p.hideEndCard === "boolean") setHideEndCard(p.hideEndCard);
       })
       .catch(() => undefined);
   }, []);
@@ -227,10 +257,12 @@ export function UploadWorkspace({
     const count = files.length;
     const bytes = files.reduce((sum, item) => sum + item.file.size, 0);
     const creditsRequired = Math.max(10, Math.ceil(bytes / (1024 * 1024)));
+    const estimate = estimateProcessingSeconds(bytes, count || 1);
     return {
       count,
       bytes,
-      estimate: estimateProcessingSeconds(bytes, count || 1),
+      estimate,
+      softLimitWarning: softLimitDurationMessage(estimate),
       creditsRequired,
       enough: balance >= creditsRequired,
     };
@@ -503,6 +535,10 @@ export function UploadWorkspace({
             trackId: musicMode === "manual" ? trackId : null,
             outputQuality: isPro ? outputQuality : "fhd",
             folder: folder.trim() || null,
+            maxSeconds,
+            endCardTitle: endCardTitle.trim() || null,
+            endCardShowDate,
+            hideEndCard: isPro ? hideEndCard : false,
           }),
         });
         fetch("/api/prefs", {
@@ -514,6 +550,9 @@ export function UploadWorkspace({
             defaultTrackId: musicMode === "manual" ? trackId : null,
             defaultOutputQuality: isPro ? outputQuality : "fhd",
             lastFolder: folder.trim() || null,
+            endCardTitle: endCardTitle.trim() || null,
+            endCardShowDate,
+            hideEndCard: isPro ? hideEndCard : false,
           }),
         }).catch(() => undefined);
         const processJson = await processRes.json();
@@ -535,6 +574,8 @@ export function UploadWorkspace({
     });
   }
 
+  const underfunded = files.length > 0 && !totals.enough;
+
   return (
     <div className="space-y-6">
       <audio
@@ -543,6 +584,29 @@ export function UploadWorkspace({
         onEnded={() => setMusicPlaying(false)}
         className="hidden"
       />
+
+      <nav
+        aria-label="Create steps"
+        className="flex items-center gap-2 text-sm text-neutral-900"
+      >
+        {(
+          [
+            ["1", "Videos"],
+            ["2", "Style"],
+            ["3", "Create"],
+          ] as const
+        ).map(([num, label], index) => (
+          <div key={label} className="flex items-center gap-2">
+            {index > 0 ? (
+              <span className="mx-1 h-px w-4 bg-neutral-200 sm:w-8" aria-hidden />
+            ) : null}
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-neutral-900 text-xs font-medium text-white">
+              {num}
+            </span>
+            <span className="font-medium">{label}</span>
+          </div>
+        ))}
+      </nav>
 
       <div className="rounded-[16px] bg-neutral-50 p-4 text-sm shadow-sm">
         <div className="flex items-center justify-between gap-3">
@@ -560,8 +624,180 @@ export function UploadWorkspace({
         ) : null}
       </div>
 
-      <div className="space-y-3 rounded-[16px] bg-neutral-50 p-4 shadow-sm">
-        <p className="text-sm font-medium text-neutral-900">Recap style</p>
+      <section className="space-y-3" aria-labelledby="step-videos">
+        <h2 id="step-videos" className="text-sm font-medium text-neutral-900">
+          1 · Videos
+        </h2>
+        <button
+          type="button"
+          onDragEnter={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
+          onDragLeave={(e) => {
+            e.preventDefault();
+            setDragOver(false);
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragOver(false);
+            if (e.dataTransfer.files?.length) addFiles(e.dataTransfer.files);
+          }}
+          onClick={() => inputRef.current?.click()}
+          className={`flex min-h-[200px] w-full flex-col items-center justify-center rounded-[16px] border border-dashed px-6 text-center transition ${
+            dragOver
+              ? "border-green-600 bg-green-50"
+              : "border-neutral-300 bg-neutral-50"
+          }`}
+        >
+          <p className="text-base font-medium text-neutral-900">
+            Choose videos from your gallery
+          </p>
+          <p className="mt-2 text-sm text-neutral-500">
+            <span className="hidden sm:inline">or drag and drop · </span>
+            {formatLimitHint()}
+          </p>
+          <input
+            ref={inputRef}
+            type="file"
+            accept="video/*,.mp4,.mov,.m4v,.webm,.mkv,.3gp"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files?.length) addFiles(e.target.files);
+              e.target.value = "";
+            }}
+          />
+        </button>
+
+        {files.length > 0 ? (
+          <div className="rounded-[16px] bg-neutral-50 p-4 shadow-sm">
+            <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+              <div>
+                <p className="text-neutral-500">Videos</p>
+                <p className="mt-1 font-medium">{totals.count}</p>
+              </div>
+              <div>
+                <p className="text-neutral-500">Size</p>
+                <p className="mt-1 font-medium">{formatBytes(totals.bytes)}</p>
+              </div>
+              <div>
+                <p className="text-neutral-500">Credits</p>
+                <p className="mt-1 font-medium">{totals.creditsRequired}</p>
+              </div>
+              <div>
+                <p className="text-neutral-500">Est. time</p>
+                <p className="mt-1 font-medium">
+                  ~{Math.ceil(totals.estimate / 60)} min
+                </p>
+              </div>
+            </div>
+            {!totals.enough ? (
+              <p className="mt-3 text-sm text-amber-700">
+                You need {totals.creditsRequired - balance} more credits before
+                processing — no rush.
+              </p>
+            ) : (
+              <p className="mt-3 text-sm text-neutral-500">
+                Clear cost: {totals.creditsRequired} credits · ~{" "}
+                {Math.ceil(totals.estimate / 60)} min · tap a thumbnail to confirm
+                each clip.
+              </p>
+            )}
+            {totals.softLimitWarning ? (
+              <p className="mt-2 text-sm text-amber-800">{totals.softLimitWarning}</p>
+            ) : null}
+          </div>
+        ) : null}
+
+        {files.length > 0 ? (
+          <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {files.map((item) => (
+              <li key={item.id} className="relative">
+                <button
+                  type="button"
+                  onClick={() => setPreviewId(item.id)}
+                  className="group relative block w-full overflow-hidden rounded-[16px] bg-neutral-900 shadow-sm"
+                  aria-label={`Preview ${item.file.name}`}
+                >
+                  <video
+                    src={item.previewUrl}
+                    muted
+                    playsInline
+                    preload="metadata"
+                    className="aspect-square w-full object-cover opacity-95 transition group-hover:opacity-100"
+                    onLoadedMetadata={(e) => {
+                      try {
+                        const el = e.currentTarget;
+                        el.currentTime = 0.1;
+                        const dur = el.duration;
+                        if (Number.isFinite(dur) && dur > 0) {
+                          setFiles((prev) =>
+                            prev.map((f) =>
+                              f.id === item.id
+                                ? { ...f, durationSeconds: dur }
+                                : f
+                            )
+                          );
+                        }
+                      } catch {
+                        /* ignore seek */
+                      }
+                    }}
+                  />
+                  {item.durationSeconds != null && item.durationSeconds > 0 ? (
+                    <span className="absolute left-2 top-2 rounded-md bg-black/60 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-white">
+                      {formatClipDuration(item.durationSeconds)}
+                    </span>
+                  ) : null}
+                  <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-2 pb-2 pt-8 text-left">
+                    <span className="block truncate text-xs font-medium text-white">
+                      {item.file.name}
+                    </span>
+                    <span className="text-[11px] text-white/80">
+                      {formatBytes(item.file.size)}
+                      {item.status === "uploading"
+                        ? ` · ${item.progress}%`
+                        : item.status === "done"
+                          ? " · uploaded"
+                          : " · tap to play"}
+                    </span>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="absolute right-2 top-2 min-h-9 min-w-9 rounded-full bg-black/55 text-sm text-white"
+                  onClick={() => removeFile(item.id)}
+                  disabled={isPending}
+                  aria-label="Remove video"
+                >
+                  ×
+                </button>
+                {item.status === "uploading" || item.status === "done" ? (
+                  <div className="mt-2 px-1">
+                    <Progress value={item.progress} className="h-1.5" />
+                  </div>
+                ) : null}
+                {item.error ? (
+                  <p className="mt-1 text-xs text-red-600">{item.error}</p>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </section>
+
+      <section
+        className="space-y-3 rounded-[16px] bg-neutral-50 p-4 shadow-sm"
+        aria-labelledby="step-style"
+      >
+        <p id="step-style" className="text-sm font-medium text-neutral-900">
+          2 · Style
+        </p>
         <label className="block text-sm text-neutral-500">
           Folder (optional)
           <input
@@ -587,6 +823,23 @@ export function UploadWorkspace({
             </button>
           ))}
         </div>
+        <p className="pt-1 text-sm font-medium text-neutral-900">Length</p>
+        <select
+          className="h-11 w-full rounded-xl border border-neutral-200 bg-white px-3 text-sm"
+          value={maxSeconds == null ? "auto" : String(maxSeconds)}
+          onChange={(e) => {
+            const v = e.target.value;
+            setMaxSeconds(v === "auto" ? null : Number(v));
+          }}
+        >
+          <option value="auto">Auto</option>
+          <option value="20">Short (~20s)</option>
+          <option value="45">Standard (~45s)</option>
+          <option value="90">Long (~90s)</option>
+        </select>
+        <p className="text-xs text-neutral-500">
+          Soft preference — we still pick the best moments within that range.
+        </p>
         <p className="pt-1 text-sm font-medium text-neutral-900">Music</p>
         <div className="grid gap-2 sm:grid-cols-3">
           {(
@@ -678,180 +931,91 @@ export function UploadWorkspace({
             </div>
             <p className="mt-2 text-xs text-neutral-500">
               4K keeps more detail from phone footage. Takes longer to render.
+              Sources below ~1440p are rendered in Full HD automatically.
             </p>
           </div>
         ) : (
           <p className="text-xs text-neutral-500">
-            Output is Full HD. Pro unlocks 4K and removes the overlay watermark.
+            Output is Full HD. A credit pack removes the overlay watermark; Pro
+            unlocks 4K, stronger AI, highlights, and longer archive.
           </p>
         )}
-      </div>
 
-      <button
-        type="button"
-        onDragEnter={(e) => {
-          e.preventDefault();
-          setDragOver(true);
-        }}
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDragOver(true);
-        }}
-        onDragLeave={(e) => {
-          e.preventDefault();
-          setDragOver(false);
-        }}
-        onDrop={(e) => {
-          e.preventDefault();
-          setDragOver(false);
-          if (e.dataTransfer.files?.length) addFiles(e.dataTransfer.files);
-        }}
-        onClick={() => inputRef.current?.click()}
-        className={`flex min-h-[200px] w-full flex-col items-center justify-center rounded-[16px] border border-dashed px-6 text-center transition ${
-          dragOver
-            ? "border-green-600 bg-green-50"
-            : "border-neutral-300 bg-neutral-50"
-        }`}
-      >
-        <p className="text-base font-medium text-neutral-900">
-          Choose videos from your gallery
-        </p>
-        <p className="mt-2 text-sm text-neutral-500">
-          or drag and drop · {formatLimitHint()}
-        </p>
-        <input
-          ref={inputRef}
-          type="file"
-          accept="video/*,.mp4,.mov,.m4v,.webm,.mkv,.3gp"
-          multiple
-          className="hidden"
-          onChange={(e) => {
-            if (e.target.files?.length) addFiles(e.target.files);
-            e.target.value = "";
-          }}
-        />
-      </button>
-
-      {files.length > 0 ? (
-        <div className="rounded-[16px] bg-neutral-50 p-4 shadow-sm">
-          <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-            <div>
-              <p className="text-neutral-500">Videos</p>
-              <p className="mt-1 font-medium">{totals.count}</p>
-            </div>
-            <div>
-              <p className="text-neutral-500">Size</p>
-              <p className="mt-1 font-medium">{formatBytes(totals.bytes)}</p>
-            </div>
-            <div>
-              <p className="text-neutral-500">Credits</p>
-              <p className="mt-1 font-medium">{totals.creditsRequired}</p>
-            </div>
-            <div>
-              <p className="text-neutral-500">Est. time</p>
-              <p className="mt-1 font-medium">
-                ~{Math.ceil(totals.estimate / 60)} min
-              </p>
-            </div>
-          </div>
-          {!totals.enough ? (
-            <p className="mt-3 text-sm text-amber-700">
-              You need {totals.creditsRequired - balance} more credits before
-              processing — no rush.
-            </p>
+        <div className="pt-2">
+          <p className="text-sm font-medium text-neutral-900">End card</p>
+          <label className="mt-2 block text-sm text-neutral-500">
+            Optional title
+            <input
+              className="mt-1 h-11 w-full rounded-xl border border-neutral-200 bg-white px-3 text-sm text-neutral-900"
+              placeholder="Summer trip · Our wedding"
+              value={endCardTitle}
+              maxLength={80}
+              onChange={(e) => setEndCardTitle(e.target.value)}
+            />
+          </label>
+          <label className="mt-3 flex min-h-11 items-center gap-2 text-sm text-neutral-700">
+            <input
+              type="checkbox"
+              checked={endCardShowDate}
+              onChange={(e) => setEndCardShowDate(e.target.checked)}
+              className="size-4 rounded border-neutral-300"
+            />
+            Show date on end card
+          </label>
+          {isPro ? (
+            <label className="mt-2 flex min-h-11 items-center gap-2 text-sm text-neutral-700">
+              <input
+                type="checkbox"
+                checked={hideEndCard}
+                onChange={(e) => setHideEndCard(e.target.checked)}
+                className="size-4 rounded border-neutral-300"
+              />
+              Hide end card (Pro)
+            </label>
           ) : (
-            <p className="mt-3 text-sm text-neutral-500">
-              Clear cost: {totals.creditsRequired} credits · ~{" "}
-              {Math.ceil(totals.estimate / 60)} min · tap a thumbnail to confirm
-              each clip.
+            <p className="mt-2 text-xs text-neutral-500">
+              Pro can hide the branded end card.
             </p>
           )}
         </div>
-      ) : null}
+      </section>
 
-      {files.length > 0 ? (
-        <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {files.map((item) => (
-            <li key={item.id} className="relative">
-              <button
-                type="button"
-                onClick={() => setPreviewId(item.id)}
-                className="group relative block w-full overflow-hidden rounded-[16px] bg-neutral-900 shadow-sm"
-                aria-label={`Preview ${item.file.name}`}
-              >
-                <video
-                  src={item.previewUrl}
-                  muted
-                  playsInline
-                  preload="metadata"
-                  className="aspect-square w-full object-cover opacity-95 transition group-hover:opacity-100"
-                  onLoadedMetadata={(e) => {
-                    try {
-                      e.currentTarget.currentTime = 0.1;
-                    } catch {
-                      /* ignore seek */
-                    }
-                  }}
-                />
-                <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-2 pb-2 pt-8 text-left">
-                  <span className="block truncate text-xs font-medium text-white">
-                    {item.file.name}
-                  </span>
-                  <span className="text-[11px] text-white/80">
-                    {formatBytes(item.file.size)}
-                    {item.status === "uploading"
-                      ? ` · ${item.progress}%`
-                      : item.status === "done"
-                        ? " · uploaded"
-                        : " · tap to play"}
-                  </span>
-                </span>
-              </button>
-              <button
-                type="button"
-                className="absolute right-2 top-2 min-h-9 min-w-9 rounded-full bg-black/55 text-sm text-white"
-                onClick={() => removeFile(item.id)}
-                disabled={isPending}
-                aria-label="Remove video"
-              >
-                ×
-              </button>
-              {item.status === "uploading" || item.status === "done" ? (
-                <div className="mt-2 px-1">
-                  <Progress value={item.progress} className="h-1.5" />
-                </div>
-              ) : null}
-              {item.error ? (
-                <p className="mt-1 text-xs text-red-600">{item.error}</p>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      ) : null}
+      <section className="space-y-3" aria-labelledby="step-create">
+        <h2 id="step-create" className="text-sm font-medium text-neutral-900">
+          3 · Create
+        </h2>
+        {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
+        {!isPro && completedRecaps >= 3 ? (
+          <p className="rounded-[16px] bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            You&apos;ve made {completedRecaps} recaps —{" "}
+            <Link href="/pricing" className="font-medium underline">
+              unlock Pro
+            </Link>{" "}
+            for 4K, no watermark, and cleaner exports.
+          </p>
+        ) : null}
 
-      <Button
-        type="button"
-        className="h-12 w-full rounded-[16px] text-base"
-        disabled={isPending || files.length === 0}
-        onClick={startUpload}
-      >
-        {isPending
-          ? "Uploading with care…"
-          : totals.enough
-            ? `Create recap · ${totals.creditsRequired} credits`
-            : "Buy credits to continue"}
-      </Button>
-      {!totals.enough && files.length > 0 ? (
-        <Button
-          asChild
-          variant="secondary"
-          className="h-12 w-full rounded-[16px]"
-        >
-          <Link href="/pricing">Go to pricing</Link>
-        </Button>
-      ) : null}
+        {underfunded ? (
+          <Button
+            asChild
+            className="h-12 w-full rounded-[16px] text-base"
+          >
+            <Link href="/pricing">Buy credits to continue</Link>
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            className="h-12 w-full rounded-[16px] text-base"
+            disabled={isPending || files.length === 0}
+            onClick={startUpload}
+          >
+            {isPending
+              ? "Uploading with care…"
+              : `Create recap · ${totals.creditsRequired} credits`}
+          </Button>
+        )}
+      </section>
 
       {previewFile ? (
         <div

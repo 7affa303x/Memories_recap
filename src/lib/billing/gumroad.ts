@@ -178,6 +178,35 @@ export function productKeyFromGumroad(input: {
 }
 
 /**
+ * Resolve grant product from Gumroad product id/permalink/name only.
+ * Never trusts url_params.product — mismatches are ignored (logged by caller).
+ */
+export function resolveGumroadSaleProduct(input: {
+  productId?: string | null;
+  permalink?: string | null;
+  productName?: string | null;
+  /** Ignored for granting; returned only so callers can log mismatches. */
+  urlParamsProduct?: string | null;
+}): {
+  key: ProductKey | null;
+  ignoredUrlParamsProduct: string | null;
+  mismatched: boolean;
+} {
+  const key = productKeyFromGumroad({
+    productId: input.productId,
+    permalink: input.permalink,
+    productName: input.productName,
+  });
+  const claimed = input.urlParamsProduct || null;
+  const mismatched = Boolean(claimed && key && claimed !== key);
+  return {
+    key,
+    ignoredUrlParamsProduct: claimed,
+    mismatched,
+  };
+}
+
+/**
  * Checkout URL with url_params so the sale webhook can map back to our user.
  */
 export function buildGumroadCheckoutUrl(input: {

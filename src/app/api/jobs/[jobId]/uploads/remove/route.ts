@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { deleteUpload, getJobForUser, getUpload } from "@/lib/jobs";
-import { getServiceSupabase } from "@/lib/supabase/admin";
 
 type Params = { params: Promise<{ jobId: string }> };
 
@@ -28,8 +27,7 @@ export async function DELETE(request: Request, { params }: Params) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const supabase = getServiceSupabase();
-  await supabase.storage.from("memories").remove([upload.storage_path]);
+  // deleteUpload handles both blob: and Supabase memories paths
   await deleteUpload(jobId, session.user.id, uploadId);
 
   return NextResponse.json({ ok: true });

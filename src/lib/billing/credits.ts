@@ -24,6 +24,7 @@ function emptyState(userId: string, email: string): BillingState {
     email,
     creemCustomerId: null,
     freeGranted: false,
+    watermarkExempt: false,
     lastDailyLoginGrantAt: null,
     lots: [],
     subscription: null,
@@ -35,6 +36,8 @@ function emptyState(userId: string, email: string): BillingState {
 }
 
 function normalizeState(raw: BillingState): BillingState {
+  // Compat only: older Storage JSON may still carry Polar/Paddle field names.
+  // Active billing is Gumroad (primary) or Creem (fallback) — do not treat Polar/Paddle as live MoR.
   const anyRaw = raw as BillingState & {
     polarCustomerId?: string | null;
     paddleCustomerId?: string | null;
@@ -47,6 +50,7 @@ function normalizeState(raw: BillingState): BillingState {
   };
 
   if (!anyRaw.creemCustomerId) {
+    // legacy rename → creemCustomerId (storage key name retained for Gumroad/Creem)
     anyRaw.creemCustomerId =
       anyRaw.paddleCustomerId || anyRaw.polarCustomerId || null;
   }
@@ -88,7 +92,21 @@ function normalizeState(raw: BillingState): BillingState {
     }
   }
 
+  if (anyRaw.watermarkExempt == null) {
+    anyRaw.watermarkExempt = (anyRaw.lots ?? []).some(
+      (lot) => lot.source === "pack"
+    );
+  }
+
   return anyRaw;
+}
+
+/** Pack purchases remove the overlay watermark (end card kept). Pure helper for tests. */
+export function watermarkExemptAfterGrant(
+  current: boolean | undefined,
+  source: CreditSource
+): boolean {
+  return Boolean(current) || source === "pack";
 }
 
 async function readState(userId: string): Promise<BillingState | null> {
@@ -260,10 +278,17 @@ function utcDayKey(d = new Date()) {
 }
 
 /**
- * +50 credits on daily login if balance <= 500. Idempotent per UTC day.
+ * Daily login top-up when balance is under the cap. Idempotent per UTC day.
+ * Only after the user has at least one completed recap job.
  */
 export async function grantDailyLoginCredits(userId: string, email: string) {
   await ensureBillingUser(userId, email);
+  const { listJobsForUser } = await import("@/lib/store");
+  const jobs = await listJobsForUser(userId);
+  const hasCompletedRecap = jobs.some((job) => job.status === "completed");
+  if (!hasCompletedRecap) {
+    return (await readState(userId)) ?? emptyState(userId, email);
+  }
   return mutate(userId, email, (state) => {
     const today = utcDayKey();
     if (state.lastDailyLoginGrantAt === today) return;
@@ -291,6 +316,7 @@ export async function getBillingSummary(userId: string, email: string) {
     return {
       balance: availableCredits(state),
       freeGranted: state.freeGranted,
+      watermarkExempt: Boolean(state.watermarkExempt),
       dailyLoginGrantedToday: state.lastDailyLoginGrantAt === utcDayKey(),
       dailyLoginAmount: DAILY_LOGIN_CREDITS,
       dailyLoginCap: DAILY_LOGIN_BALANCE_CAP,
@@ -308,6 +334,7 @@ export async function getBillingSummary(userId: string, email: string) {
     return {
       balance: availableCredits(state),
       freeGranted: state.freeGranted,
+      watermarkExempt: Boolean(state.watermarkExempt),
       dailyLoginGrantedToday: state.lastDailyLoginGrantAt === utcDayKey(),
       dailyLoginAmount: DAILY_LOGIN_CREDITS,
       dailyLoginCap: DAILY_LOGIN_BALANCE_CAP,
@@ -354,6 +381,10 @@ export async function grantCredits(input: {
       source: input.source,
       creemEventId: input.creemEventId,
     });
+    state.watermarkExempt = watermarkExemptAfterGrant(
+      state.watermarkExempt,
+      input.source
+    );
     const tx: BillingTransaction = {
       id: randomUUID(),
       type: input.type,
@@ -535,6 +566,18 @@ export async function restoreCreditsForRefund(input: {
   });
 }
 
+export async function isWebhookProcessed(eventId: string): Promise<boolean> {
+  const supabase = getServiceSupabase();
+  const path = `webhooks/${eventId}.json`;
+  const existing = await supabase.storage.from(BUCKET).download(path);
+  return Boolean(existing.data) && !existing.error;
+}
+
+/**
+ * Mark a webhook event as processed. Returns false if already recorded.
+ * Callers should grant credits / apply side effects BEFORE marking, so a
+ * failed grant is retryable on the next delivery.
+ */
 export async function markWebhookProcessed(eventId: string, type: string) {
   const supabase = getServiceSupabase();
   const path = `webhooks/${eventId}.json`;

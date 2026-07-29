@@ -21,7 +21,16 @@ export default function TermsPage() {
         <h1 className="text-2xl font-medium tracking-tight text-neutral-900">
           Terms of Service
         </h1>
-        <p>Last updated: July 27, 2026</p>
+        <p>Last updated: July 29, 2026</p>
+
+        <section className="space-y-2">
+          <h2 className="text-lg font-medium text-neutral-900">Entity</h2>
+          <p>
+            Memories Recap / operator to be updated upon LLC formation. Until
+            then, these terms describe the service operated at memoriesrecap.app
+            and related deployments.
+          </p>
+        </section>
 
         <section className="space-y-2">
           <h2 className="text-lg font-medium text-neutral-900">Service</h2>
@@ -54,15 +63,126 @@ export default function TermsPage() {
 
         <section className="space-y-2">
           <h2 className="text-lg font-medium text-neutral-900">
+            Acceptable use
+          </h2>
+          <p>
+            You may not use Memories Recap to upload or distribute illegal
+            content, malware, malware, or material that infringes others&apos;
+            rights; to probe or disrupt the service; to reverse-engineer music
+            or branding assets; or to resell access in a way that circumvents
+            credit or subscription pricing. We may suspend accounts that violate
+            these rules.
+          </p>
+        </section>
+
+        <section className="space-y-2">
+          <h2 className="text-lg font-medium text-neutral-900">Age</h2>
+          <p>
+            You must be at least 13 years old to use Memories Recap. If you are
+            under the age of majority where you live, you need a parent or
+            guardian&apos;s permission.
+          </p>
+        </section>
+
+        <section className="space-y-2">
+          <h2 className="text-lg font-medium text-neutral-900">
             Commercial license
           </h2>
           <p>
             You may publish your recaps personally or commercially (ads, client
-            work, social channels) when the footage is yours. Music included in
-            a recap is licensed only as part of that recap output under the
-            music provider terms we use; do not extract soundtrack files for
-            unrelated projects. Pro archive retention is longer; Free recaps
-            expire sooner as disclosed on the result page.
+            work, social channels) when the footage is yours. Pro archive
+            retention is longer; Free recaps expire sooner as disclosed on the
+            result page.
+          </p>
+        </section>
+
+        <section className="space-y-2">
+          <h2 className="text-lg font-medium text-neutral-900">Music license</h2>
+          <p>
+            Music included in a recap is licensed only as part of that recap
+            output under the music provider terms we use. Do not extract
+            soundtrack files for unrelated projects or redistribute tracks
+            separately from the recap video.
+          </p>
+        </section>
+
+        <section className="space-y-2">
+          <h2 className="text-lg font-medium text-neutral-900">Refunds</h2>
+          <p>
+            Digital goods (credit packs and subscriptions) follow the refund
+            policy of the payment provider configured as merchant of record
+            (Gumroad and/or Creem). If a job fails because of a system error on
+            our side, reserved credits are restored automatically — that is the
+            primary remedy for failed processing.
+          </p>
+        </section>
+
+        <section className="space-y-2">
+          <h2 className="text-lg font-medium text-neutral-900">
+            Disclaimer of warranties
+          </h2>
+          <p>
+            The service is provided &quot;as is&quot; and &quot;as
+            available.&quot; We do not warrant that every upload will produce a
+            particular aesthetic result, that processing will always succeed, or
+            that the service will be uninterrupted. Automated clip selection is
+            imperfect by nature.
+          </p>
+        </section>
+
+        <section className="space-y-2">
+          <h2 className="text-lg font-medium text-neutral-900">
+            Limitation of liability
+          </h2>
+          <p>
+            To the fullest extent permitted by law, Memories Recap and its
+            operators are not liable for indirect, incidental, special,
+            consequential, or punitive damages, or for lost profits, data, or
+            goodwill arising from use of the service. Our aggregate liability
+            for any claim related to the service is limited to the amounts you
+            paid us for credits or subscription in the three months before the
+            claim.
+          </p>
+        </section>
+
+        <section className="space-y-2">
+          <h2 className="text-lg font-medium text-neutral-900">Termination</h2>
+          <p>
+            You may stop using the service and request account deletion at any
+            time from your account page or by contacting support. We may suspend
+            or terminate access for abuse, non-payment, or legal risk. After
+            deletion, retention windows for remaining files follow our privacy
+            policy.
+          </p>
+        </section>
+
+        <section className="space-y-2">
+          <h2 className="text-lg font-medium text-neutral-900">DMCA</h2>
+          <p>
+            If you believe content on Memories Recap infringes your copyright,
+            send a notice to{" "}
+            <a className="underline" href="mailto:support@memoriesrecap.app">
+              support@memoriesrecap.app
+            </a>{" "}
+            and{" "}
+            <a className="underline" href="mailto:haffa303@gmail.com">
+              haffa303@gmail.com
+            </a>
+            . Include the work claimed, the material&apos;s location, your
+            contact details, and a good-faith statement under penalty of
+            perjury. Placeholder contact addresses may be updated when the
+            operating entity is finalized.
+          </p>
+        </section>
+
+        <section className="space-y-2">
+          <h2 className="text-lg font-medium text-neutral-900">
+            Governing law
+          </h2>
+          <p>
+            Governing law and venue placeholder — to be updated upon LLC
+            formation and registered address. Until then, disputes are handled
+            in good faith via support before formal process.
           </p>
         </section>
 

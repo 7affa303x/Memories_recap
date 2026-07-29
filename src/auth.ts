@@ -2,6 +2,7 @@ import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 import { upsertUser } from "@/lib/jobs";
 import { ensureBillingUser } from "@/lib/billing/credits";
+import { sendWelcomeEmail } from "@/lib/email/welcome";
 
 const useSecureCookies = process.env.NODE_ENV === "production";
 
@@ -68,6 +69,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         });
         // Non-blocking for login success; upload page also ensures billing
         await ensureBillingUser(account.providerAccountId, user.email);
+        // First-time welcome (no-ops without RESEND_API_KEY; once per user)
+        await sendWelcomeEmail({
+          to: user.email,
+          name: user.name,
+          userId: account.providerAccountId,
+        }).catch(() => undefined);
       } catch (error) {
         console.error("user/billing bootstrap failed", error);
       }

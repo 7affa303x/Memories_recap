@@ -13,6 +13,11 @@ export type UserPrefs = {
   defaultTrackId: string | null;
   defaultOutputQuality: OutputQuality;
   lastFolder: string | null;
+  /** Soft default end-card title */
+  endCardTitle: string | null;
+  endCardShowDate: boolean;
+  /** Pro: omit end card by default when creating */
+  hideEndCard: boolean;
   updatedAt: string;
 };
 
@@ -25,6 +30,9 @@ function defaults(userId: string): UserPrefs {
     defaultTrackId: null,
     defaultOutputQuality: "fhd",
     lastFolder: null,
+    endCardTitle: null,
+    endCardShowDate: false,
+    hideEndCard: false,
     updatedAt: new Date().toISOString(),
   };
 }

@@ -2,12 +2,19 @@ import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { requireUser } from "@/lib/session";
 import { getJobForUser, getRecap, listUploads } from "@/lib/jobs";
-import { signedRecapUrl, getServiceSupabase } from "@/lib/supabase/admin";
+import { signedRecapUrl } from "@/lib/supabase/admin";
+import { signedSourcePreviewUrl } from "@/lib/source-download";
 import { getAppUrl } from "@/lib/billing/config";
 import { Button } from "@/components/ui/button";
 import { ShareControls } from "@/components/share-controls";
 import { AppHeader } from "@/components/app-header";
 import { RemixPanel } from "@/components/remix-panel";
+import {
+  DeleteOriginalsButton,
+  RecapRating,
+  VersionRestoreButton,
+} from "@/components/result-actions";
+import { PreviewClipButton } from "@/components/preview-clip-button";
 import Link from "next/link";
 import { formatBytes } from "@/lib/types";
 import {
@@ -48,18 +55,18 @@ export default async function ResultPage({ params }: Props) {
   const tiktokUrl = recap.tiktok_path
     ? await signedRecapUrl(recap.tiktok_path)
     : null;
+  const previewUrl = recap.preview_path
+    ? await signedRecapUrl(recap.preview_path)
+    : null;
   const initialShareUrl = job.share_token
     ? `${getAppUrl()}/s/${job.share_token}`
     : null;
 
   const uploads = await listUploads(jobId, user.id);
-  const supabase = getServiceSupabase();
   const beforeThumbs: string[] = [];
   for (const upload of uploads.slice(0, 4)) {
-    const { data } = await supabase.storage
-      .from("memories")
-      .createSignedUrl(upload.storage_path, 3600);
-    if (data?.signedUrl) beforeThumbs.push(data.signedUrl);
+    const url = await signedSourcePreviewUrl(upload.storage_path, 3600);
+    if (url) beforeThumbs.push(url);
   }
 
   const expiresLabel = recap.expires_at
@@ -67,10 +74,12 @@ export default async function ResultPage({ params }: Props) {
     : null;
 
   let showProNudge = false;
+  let isPro = false;
   try {
     const summary = await getBillingSummary(user.id, user.email);
     const status = summary.subscription?.status;
-    showProNudge = !(status === "active" || status === "trialing");
+    isPro = status === "active" || status === "trialing";
+    showProNudge = !isPro;
   } catch {
     showProNudge = true;
   }
@@ -160,6 +169,8 @@ export default async function ResultPage({ params }: Props) {
           </div>
         ) : null}
 
+        <RecapRating jobId={jobId} initialRating={recap.rating} />
+
         <div className="space-y-3 rounded-[16px] bg-neutral-50 p-4 shadow-sm">
           <p className="text-sm font-medium">Downloads</p>
           <div className="grid gap-2">
@@ -217,19 +228,39 @@ export default async function ResultPage({ params }: Props) {
                 </a>
               </Button>
             ) : null}
+            <PreviewClipButton jobId={jobId} initialUrl={previewUrl} />
           </div>
         </div>
+
+        {uploads.length > 0 ? (
+          <DeleteOriginalsButton
+            jobId={jobId}
+            uploadIds={uploads.map((u) => u.id)}
+          />
+        ) : null}
 
         {recap.versions && recap.versions.length > 1 ? (
           <div className="rounded-[16px] bg-neutral-50 p-4 text-sm shadow-sm">
             <p className="font-medium">Version history</p>
-            <ul className="mt-2 space-y-1 text-neutral-500">
+            <ul className="mt-2 space-y-2 text-neutral-500">
               {[...recap.versions].reverse().map((v) => (
-                <li key={v.generation}>
-                  v{v.generation}
-                  {v.mood ? ` · ${v.mood}` : ""} ·{" "}
-                  {new Date(v.created_at).toLocaleString()}
-                  {v.generation === recap.current_generation ? " · current" : ""}
+                <li
+                  key={v.generation}
+                  className="flex flex-wrap items-center justify-between gap-2"
+                >
+                  <span>
+                    v{v.generation}
+                    {v.mood ? ` · ${v.mood}` : ""} ·{" "}
+                    {new Date(v.created_at).toLocaleString()}
+                    {v.generation === recap.current_generation
+                      ? " · current"
+                      : ""}
+                  </span>
+                  <VersionRestoreButton
+                    jobId={jobId}
+                    generation={v.generation}
+                    isCurrent={v.generation === recap.current_generation}
+                  />
                 </li>
               ))}
             </ul>
@@ -239,9 +270,15 @@ export default async function ResultPage({ params }: Props) {
         <RemixPanel
           jobId={jobId}
           currentMood={job.recap_options?.mood || "joyful"}
+          currentQuality={job.recap_options?.outputQuality || "fhd"}
+          isPro={isPro}
         />
 
         <ShareControls jobId={jobId} initialShareUrl={initialShareUrl} />
+
+        <p className="text-xs text-neutral-500">
+          Music beds are for recap use under our library terms.
+        </p>
 
         {showProNudge ? (
           <div className="rounded-[16px] bg-neutral-50 p-4 text-sm text-neutral-600 shadow-sm">
@@ -275,6 +312,13 @@ export default async function ResultPage({ params }: Props) {
           className="h-12 rounded-[16px] text-base text-neutral-600"
         >
           <Link href="/upload">Create another</Link>
+        </Button>
+        <Button
+          asChild
+          variant="ghost"
+          className="h-11 rounded-[16px] text-sm text-neutral-500"
+        >
+          <Link href="/account">Account</Link>
         </Button>
         <Button
           asChild

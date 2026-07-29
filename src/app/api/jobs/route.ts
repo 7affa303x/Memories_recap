@@ -3,7 +3,10 @@ import { auth } from "@/auth";
 import { createJob } from "@/lib/jobs";
 import { creditsForBytes } from "@/lib/billing/config";
 import { getBillingSummary } from "@/lib/billing/credits";
-import { estimateProcessingSeconds } from "@/lib/types";
+import {
+  estimateProcessingSeconds,
+  softLimitDurationMessage,
+} from "@/lib/types";
 import {
   friendlyFileLimitMessage,
   isLikelyVideoFile,
@@ -69,13 +72,15 @@ export async function POST(request: Request) {
 
   const creditsRequired = creditsForBytes(totalBytes);
   const summary = await getBillingSummary(session.user.id, session.user.email);
+  const etaSeconds = estimateProcessingSeconds(totalBytes, files.length);
+  const softLimitWarning = softLimitDurationMessage(etaSeconds);
 
   const job = await createJob({
     userId: session.user.id,
     email: session.user.email,
     totalBytes,
     fileCount: files.length,
-    etaSeconds: estimateProcessingSeconds(totalBytes, files.length),
+    etaSeconds,
     title: body.title || null,
   });
 
@@ -86,6 +91,7 @@ export async function POST(request: Request) {
       balance: summary.balance,
       enough: summary.balance >= creditsRequired,
     },
+    softLimitWarning,
   });
 }
 

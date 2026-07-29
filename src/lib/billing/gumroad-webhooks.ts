@@ -1,12 +1,13 @@
 import {
   grantCredits,
+  isWebhookProcessed,
   markWebhookProcessed,
   restoreCreditsForRefund,
   upsertSubscription,
 } from "@/lib/billing/credits";
 import { PRODUCT_CREDITS } from "@/lib/billing/config";
-import { productKeyFromGumroad } from "@/lib/billing/gumroad";
-import type { ProductKey } from "@/lib/billing/types";
+import { resolveGumroadSaleProduct } from "@/lib/billing/gumroad";
+import { isBillingSelfPurchase } from "@/lib/billing/self-purchase";
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object") return null;
@@ -32,14 +33,18 @@ function pickUrlParam(
   return null;
 }
 
+/**
+ * Run grant/refund first; mark processed only after success so failed grants retry.
+ * grantCredits / restoreCreditsForRefund are themselves idempotent by event id.
+ */
 async function withIdempotency(
   eventId: string,
   type: string,
   fn: () => Promise<void>
 ) {
-  const fresh = await markWebhookProcessed(eventId, type);
-  if (!fresh) return;
+  if (await isWebhookProcessed(eventId)) return;
   await fn();
+  await markWebhookProcessed(eventId, type);
 }
 
 /**
@@ -86,21 +91,27 @@ export async function handleGumroadSalePayload(
     return { ok: false, reason: "missing_user_id" as const };
   }
 
+  // Soft guard: seller / self-test emails get no credits
+  if (isBillingSelfPurchase(email)) {
+    console.warn("gumroad sale skipped self-purchase", { saleId, email, userId });
+    return { ok: false, reason: "self_purchase" as const, granted: 0 as const };
+  }
+
   const productId = str(raw.product_id) || str(raw.product_permalink);
   const permalink =
     str(raw.product_permalink) ||
     str(raw.short_product_id) ||
     str(raw.permalink);
   const productName = str(raw.product_name) || str(raw.name);
-  const metaProduct = pickUrlParam(urlParams, "product") as ProductKey | null;
-
-  const key =
-    metaProduct ||
-    productKeyFromGumroad({
-      productId,
-      permalink,
-      productName,
-    });
+  // Never trust url_params.product for granting — resolve from product_id/permalink.
+  const metaProduct = pickUrlParam(urlParams, "product");
+  const resolved = resolveGumroadSaleProduct({
+    productId,
+    permalink,
+    productName,
+    urlParamsProduct: metaProduct,
+  });
+  const key = resolved.key;
 
   if (!key) {
     console.warn("gumroad sale unknown product", {
@@ -110,6 +121,14 @@ export async function handleGumroadSalePayload(
       productName,
     });
     return { ok: false, reason: "unknown_product" as const };
+  }
+
+  if (resolved.mismatched) {
+    console.warn("gumroad sale url_params.product mismatch (ignored)", {
+      saleId,
+      metaProduct: resolved.ignoredUrlParamsProduct,
+      key,
+    });
   }
 
   const eventId = `gumroad.sale:${saleId}`;
@@ -178,14 +197,22 @@ export async function handleGumroadRefundPayload(
   if (!userId) return;
 
   const email = str(raw.email) || "unknown@memoryrecap.app";
-  const metaProduct = pickUrlParam(urlParams, "product") as ProductKey | null;
-  const key =
-    metaProduct ||
-    productKeyFromGumroad({
-      productId: str(raw.product_id),
-      permalink: str(raw.product_permalink),
-      productName: str(raw.product_name),
+  // Never trust url_params.product for refund amount — resolve from product_id/permalink.
+  const metaProduct = pickUrlParam(urlParams, "product");
+  const resolved = resolveGumroadSaleProduct({
+    productId: str(raw.product_id),
+    permalink: str(raw.product_permalink),
+    productName: str(raw.product_name),
+    urlParamsProduct: metaProduct,
+  });
+  const key = resolved.key;
+  if (resolved.mismatched) {
+    console.warn("gumroad refund url_params.product mismatch (ignored)", {
+      saleId,
+      metaProduct: resolved.ignoredUrlParamsProduct,
+      key,
     });
+  }
   const amount = key ? PRODUCT_CREDITS[key] : 0;
   const eventId = `gumroad.refund:${saleId}`;
   await withIdempotency(eventId, "gumroad.refund", async () => {

@@ -1,21 +1,33 @@
+import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import {
   handleGumroadRefundPayload,
   handleGumroadSalePayload,
   handleGumroadSubscriptionLifecycle,
 } from "@/lib/billing/gumroad-webhooks";
+import { gumroadWebhookBodySchema, parseOr400 } from "@/lib/validation";
 
 export const runtime = "nodejs";
 
-function authorize(request: Request) {
+function timingSafeTokenEqual(a: string, b: string) {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return timingSafeEqual(bufA, bufB);
+}
+
+function authorize(request: Request): { ok: true } | { ok: false; status: 401 | 503 } {
   const secret = process.env.GUMROAD_WEBHOOK_SECRET;
-  if (!secret) return true;
+  if (!secret) return { ok: false, status: 503 };
   const url = new URL(request.url);
   const token =
     url.searchParams.get("token") ||
     request.headers.get("x-gumroad-token") ||
     "";
-  return token === secret;
+  if (!timingSafeTokenEqual(token, secret)) {
+    return { ok: false, status: 401 };
+  }
+  return { ok: true };
 }
 
 async function parseBody(request: Request): Promise<Record<string, unknown>> {
@@ -45,12 +57,29 @@ function detectType(raw: Record<string, unknown>) {
 }
 
 export async function POST(request: Request) {
-  if (!authorize(request)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const auth = authorize(request);
+  if (!auth.ok) {
+    return NextResponse.json(
+      {
+        error:
+          auth.status === 503
+            ? "Gumroad webhook secret not configured"
+            : "Unauthorized",
+      },
+      { status: auth.status }
+    );
   }
 
   try {
-    const raw = await parseBody(request);
+    const rawBody = await parseBody(request);
+    const parsed = parseOr400(gumroadWebhookBodySchema, rawBody);
+    if (!parsed.ok) {
+      return NextResponse.json(
+        { error: parsed.error, details: parsed.details },
+        { status: 400 }
+      );
+    }
+    const raw = parsed.data as Record<string, unknown>;
     const type = detectType(raw);
 
     switch (type) {

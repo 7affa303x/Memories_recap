@@ -5,6 +5,7 @@ import { listJobsForUser } from "@/lib/jobs";
 import { Button } from "@/components/ui/button";
 import { STAGE_LABELS } from "@/lib/types";
 import { AppHeader } from "@/components/app-header";
+import { JobCancelButton } from "@/components/job-cancel-button";
 import { dashboardCareLine, welcomeLine } from "@/lib/greeting";
 
 export const metadata: Metadata = {
@@ -86,8 +87,17 @@ export default async function DashboardPage({
 
         <ul className="space-y-3">
           {visible.length === 0 ? (
-            <li className="rounded-[16px] bg-neutral-50 px-4 py-6 text-sm text-neutral-500">
-              No recaps yet. Upload a few videos to start.
+            <li className="rounded-[16px] bg-[radial-gradient(600px_240px_at_50%_0%,#dcfce7,transparent),#fafafa] px-5 py-10 text-center shadow-sm">
+              <p className="font-display text-xl font-semibold tracking-tight text-green-900">
+                No recaps yet
+              </p>
+              <p className="mx-auto mt-2 max-w-xs text-sm text-neutral-500">
+                Upload a few phone videos and we&apos;ll turn them into one calm
+                watchable story.
+              </p>
+              <Button asChild className="mt-6 h-12 rounded-[16px] px-8 text-base">
+                <Link href="/upload">Create your first recap</Link>
+              </Button>
             </li>
           ) : (
             visible.map((job) => {
@@ -97,10 +107,13 @@ export default async function DashboardPage({
                   : `/processing/${job.id}`;
               const folder = job.folder || job.recap_options?.folder;
               return (
-                <li key={job.id}>
+                <li
+                  key={job.id}
+                  className="rounded-[16px] bg-neutral-50 px-4 py-4 shadow-sm"
+                >
                   <Link
                     href={href}
-                    className="block rounded-[16px] bg-neutral-50 px-4 py-4 shadow-sm transition hover:bg-neutral-100"
+                    className="block transition hover:opacity-90"
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div>
@@ -121,10 +134,33 @@ export default async function DashboardPage({
                           ? "Open"
                           : job.status === "failed"
                             ? "Retry"
-                            : `${job.progress}%`}
+                            : job.status === "cancelled"
+                              ? "Cancelled"
+                              : `${job.progress}%`}
                       </span>
                     </div>
                   </Link>
+                  <div className="mt-3">
+                    {job.status === "completed" ||
+                    job.status === "cancelled" ||
+                    job.status === "failed" ? (
+                      <JobCancelButton
+                        jobId={job.id}
+                        mode="remove"
+                        redirectTo={null}
+                        variant="ghost"
+                        className="h-9 px-0 text-sm text-neutral-500"
+                      />
+                    ) : (
+                      <JobCancelButton
+                        jobId={job.id}
+                        mode="cancel"
+                        redirectTo={null}
+                        variant="ghost"
+                        className="h-9 px-0 text-sm text-neutral-500"
+                      />
+                    )}
+                  </div>
                 </li>
               );
             })

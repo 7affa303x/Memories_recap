@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
+import { JobCancelButton } from "@/components/job-cancel-button";
 import { STAGE_LABELS, formatEta, type JobRow } from "@/lib/types";
 import {
   creditsRestoredLine,
@@ -32,6 +33,19 @@ export function ProcessingTracker({ jobId }: { jobId: string }) {
   const [job, setJob] = useState<JobRow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [retrying, setRetrying] = useState(false);
+  const [notifyOptIn, setNotifyOptIn] = useState<"idle" | "granted" | "denied">(
+    "idle"
+  );
+
+  useEffect(() => {
+    try {
+      if ("Notification" in window && Notification.permission === "granted") {
+        setNotifyOptIn("granted");
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -69,19 +83,25 @@ export function ProcessingTracker({ jobId }: { jobId: string }) {
     }
 
     tick();
-    try {
-      if ("Notification" in window && Notification.permission === "default") {
-        void Notification.requestPermission();
-      }
-    } catch {
-      // ignore
-    }
 
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
   }, [jobId, router]);
+
+  async function enableNotifications() {
+    try {
+      if (!("Notification" in window) || typeof Notification !== "function") {
+        setNotifyOptIn("denied");
+        return;
+      }
+      const result = await Notification.requestPermission();
+      setNotifyOptIn(result === "granted" ? "granted" : "denied");
+    } catch {
+      setNotifyOptIn("denied");
+    }
+  }
 
   async function retry() {
     setRetrying(true);
@@ -117,9 +137,23 @@ export function ProcessingTracker({ jobId }: { jobId: string }) {
         </h1>
         <p className="mt-2 text-sm text-neutral-500">{processingCareLine()}</p>
         <p className="mt-1 text-xs text-neutral-400">
-          Keep this tab open for live progress — or come back from your
-          dashboard anytime.
+          You can close this tab — processing continues in the background. Check
+          back here or from your dashboard anytime. If email is enabled for your
+          account, we&apos;ll notify you when it&apos;s ready.
         </p>
+        {notifyOptIn === "idle" ? (
+          <button
+            type="button"
+            onClick={() => void enableNotifications()}
+            className="mt-3 text-sm font-medium text-green-800 underline underline-offset-2"
+          >
+            Notify me when ready
+          </button>
+        ) : notifyOptIn === "granted" ? (
+          <p className="mt-3 text-xs text-neutral-500">
+            We’ll notify you in this browser when it’s ready.
+          </p>
+        ) : null}
       </div>
 
       <div className="rounded-[16px] bg-neutral-50 p-5 shadow-sm">
@@ -180,7 +214,14 @@ export function ProcessingTracker({ jobId }: { jobId: string }) {
             </div>
           ) : null}
         </div>
-      ) : null}
+      ) : (
+        <JobCancelButton
+          jobId={jobId}
+          mode="cancel"
+          className="h-11 w-full rounded-[16px] text-sm"
+          variant="secondary"
+        />
+      )}
     </div>
   );
 }

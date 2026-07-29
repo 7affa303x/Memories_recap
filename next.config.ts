@@ -12,6 +12,7 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["ffmpeg-static", "fluent-ffmpeg"],
   outputFileTracingIncludes: {
     "/api/jobs/[jobId]/process": ["./node_modules/ffmpeg-static/**/*"],
+    "/api/jobs/[jobId]/remix": ["./node_modules/ffmpeg-static/**/*"],
     "/api/cron/process": ["./node_modules/ffmpeg-static/**/*"],
   },
 };

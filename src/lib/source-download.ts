@@ -1,4 +1,4 @@
-import { get } from "@vercel/blob";
+import { get, head, issueSignedToken, presignUrl } from "@vercel/blob";
 import { createWriteStream } from "node:fs";
 import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
@@ -35,4 +35,46 @@ export async function downloadSourceToFile(path: string, dest: string) {
     Readable.fromWeb(data.stream() as never),
     createWriteStream(dest)
   );
+}
+
+/**
+ * Browser-playable URL for a source upload (Supabase signed or Blob presigned).
+ * Returns null when signing is unavailable.
+ */
+export async function signedSourcePreviewUrl(
+  storagePath: string,
+  expiresInSeconds = 3600
+): Promise<string | null> {
+  if (isBlobStoragePath(storagePath)) {
+    const pathname = blobPathnameFromStorage(storagePath);
+    try {
+      const validUntil = Date.now() + expiresInSeconds * 1000;
+      const token = await issueSignedToken({
+        pathname,
+        operations: ["get"],
+        validUntil,
+      });
+      const { presignedUrl } = await presignUrl(token, {
+        pathname,
+        operation: "get",
+        access: "private",
+        validUntil,
+      });
+      return presignedUrl;
+    } catch {
+      // Fallback: head may expose a store URL that still needs auth — skip
+      try {
+        await head(pathname);
+      } catch {
+        /* ignore */
+      }
+      return null;
+    }
+  }
+
+  const supabase = getServiceSupabase();
+  const { data } = await supabase.storage
+    .from("memories")
+    .createSignedUrl(storagePath, expiresInSeconds);
+  return data?.signedUrl ?? null;
 }
