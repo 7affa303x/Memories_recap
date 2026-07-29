@@ -122,7 +122,11 @@ export default async function PricingPage() {
           <p className="font-medium text-neutral-800">FAQ</p>
           <p>1 credit ≈ 1 MB processed (minimum 10 per job).</p>
           <p>If processing fails on our side, credits are restored.</p>
-          <p>Manage cards and cancellations in the billing portal.</p>
+          <p>
+            Checkout is powered by Gumroad (or Creem as fallback). After payment,
+            credits land on your Memories Recap account automatically.
+          </p>
+          <p>Manage cards and memberships from the billing portal / Gumroad library.</p>
           <p>
             Need a hand?{" "}
             <Link href="/support" className="text-green-700 underline">

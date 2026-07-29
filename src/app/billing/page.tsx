@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { requireUser } from "@/lib/session";
 import { getBillingSummary } from "@/lib/billing/credits";
+import { getBillingProvider } from "@/lib/billing/config";
 import { Button } from "@/components/ui/button";
 import { FREE_CREDITS } from "@/lib/billing/config";
 import { CheckoutSuccessBeacon } from "@/components/checkout-success-beacon";
@@ -57,6 +58,7 @@ export default async function BillingPage({
   const params = await searchParams;
   const summary = await getBillingSummary(user.id, user.email);
   const plan = humanSubscription(summary);
+  const provider = getBillingProvider();
 
   return (
     <main className="mx-auto flex min-h-full w-full max-w-lg flex-col px-6 pb-16 pt-8">
@@ -126,7 +128,11 @@ export default async function BillingPage({
             variant="secondary"
             className="h-12 rounded-[16px] bg-white text-base shadow-sm"
           >
-            <a href="/api/billing/portal">Open billing portal</a>
+            <a href="/api/billing/portal">
+              {provider === "gumroad"
+                ? "Manage on Gumroad"
+                : "Open billing portal"}
+            </a>
           </Button>
           <Button
             asChild

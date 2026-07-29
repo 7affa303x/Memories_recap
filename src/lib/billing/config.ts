@@ -37,6 +37,21 @@ export function getAppUrl() {
   ).replace(/\/$/, "");
 }
 
+/** Active merchant of record: gumroad | creem */
+export function getBillingProvider(): "gumroad" | "creem" {
+  const raw = (process.env.BILLING_PROVIDER || "").toLowerCase();
+  if (raw === "gumroad" || raw === "creem") return raw;
+  // Prefer Gumroad when token + at least one permalink are present
+  if (
+    process.env.GUMROAD_ACCESS_TOKEN &&
+    (process.env.GUMROAD_PERMALINK_CREDITS_SMALL ||
+      process.env.GUMROAD_PRODUCT_CREDITS_SMALL)
+  ) {
+    return "gumroad";
+  }
+  return "creem";
+}
+
 export const FREE_CREDITS = numberEnv("FREE_CREDITS", 200);
 export const DAILY_LOGIN_CREDITS = numberEnv("DAILY_LOGIN_CREDITS", 50);
 export const DAILY_LOGIN_BALANCE_CAP = numberEnv("DAILY_LOGIN_BALANCE_CAP", 500);

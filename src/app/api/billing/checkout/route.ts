@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getCreemClient } from "@/lib/billing/creem";
-import { getAppUrl, getProductId } from "@/lib/billing/config";
+import {
+  getAppUrl,
+  getBillingProvider,
+  getProductId,
+} from "@/lib/billing/config";
+import { buildGumroadCheckoutUrl } from "@/lib/billing/gumroad";
 import type { ProductKey } from "@/lib/billing/types";
 
 const ALLOWED: ProductKey[] = [
@@ -23,7 +28,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid product" }, { status: 400 });
   }
 
+  const provider = getBillingProvider();
+
   try {
+    if (provider === "gumroad") {
+      const url = buildGumroadCheckoutUrl({
+        product,
+        userId: session.user.id,
+        email: session.user.email,
+      });
+      return NextResponse.json({
+        url,
+        provider: "gumroad",
+      });
+    }
+
     const creem = getCreemClient();
     const appUrl = getAppUrl();
     const checkout = await creem.checkouts.create({
@@ -48,6 +67,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       url: checkout.checkoutUrl,
       id: checkout.id,
+      provider: "creem",
     });
   } catch (error) {
     const message =

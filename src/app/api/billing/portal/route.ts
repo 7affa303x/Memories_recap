@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { getAppUrl } from "@/lib/billing/config";
+import { getAppUrl, getBillingProvider } from "@/lib/billing/config";
 import { getBillingSummary } from "@/lib/billing/credits";
 import { getCreemClient } from "@/lib/billing/creem";
 
@@ -9,6 +9,11 @@ export async function GET() {
   const session = await auth();
   if (!session?.user?.id || !session.user.email) {
     return NextResponse.redirect(new URL("/api/auth/signin", appUrl));
+  }
+
+  if (getBillingProvider() === "gumroad") {
+    // Buyers manage cards / memberships on Gumroad
+    return NextResponse.redirect("https://gumroad.com/library");
   }
 
   const summary = await getBillingSummary(session.user.id, session.user.email);
