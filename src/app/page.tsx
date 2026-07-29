@@ -4,6 +4,7 @@ import { signOutAction } from "@/app/actions/auth";
 import { Button } from "@/components/ui/button";
 import { GoogleSignInButton } from "@/components/google-sign-in-button";
 import { BRAND_NAME, BRAND_TAGLINE } from "@/lib/brand";
+import { welcomeLine } from "@/lib/greeting";
 
 export const metadata: Metadata = {
   title: `${BRAND_NAME} — ${BRAND_TAGLINE}`,
@@ -45,6 +46,11 @@ export default async function LandingPage({
         </header>
 
         <section className="pt-10">
+          {user ? (
+            <p className="mb-3 text-sm font-medium text-green-800">
+              {welcomeLine({ name: user.name })} Welcome back.
+            </p>
+          ) : null}
           <h1 className="font-display text-[42px] font-semibold leading-[1.05] tracking-tight text-green-900 sm:text-[48px]">
             {BRAND_NAME}
           </h1>

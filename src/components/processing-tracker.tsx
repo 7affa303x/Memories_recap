@@ -6,6 +6,10 @@ import { useRouter } from "next/navigation";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { STAGE_LABELS, formatEta, type JobRow } from "@/lib/types";
+import {
+  creditsRestoredLine,
+  processingCareLine,
+} from "@/lib/greeting";
 
 const STAGES = ["analyzing", "selecting", "building", "rendering"] as const;
 
@@ -111,9 +115,10 @@ export function ProcessingTracker({ jobId }: { jobId: string }) {
         <h1 className="mt-2 text-2xl font-medium tracking-tight">
           {STAGE_LABELS[stage] || "Processing"}
         </h1>
-        <p className="mt-2 text-sm text-neutral-500">
-          Keep this tab open for live progress. You can also return later from
-          your dashboard.
+        <p className="mt-2 text-sm text-neutral-500">{processingCareLine()}</p>
+        <p className="mt-1 text-xs text-neutral-400">
+          Keep this tab open for live progress — or come back from your
+          dashboard anytime.
         </p>
       </div>
 
@@ -155,9 +160,11 @@ export function ProcessingTracker({ jobId }: { jobId: string }) {
       {showError ? (
         <div className="space-y-3 rounded-[16px] bg-red-50 p-4">
           <p className="text-sm text-red-700">
-            {error ||
-              "Processing failed. If this was a system error, credits were restored."}
+            {error || "Something went wrong while crafting this recap."}
           </p>
+          {failed ? (
+            <p className="mt-2 text-xs text-red-600/80">{creditsRestoredLine()}</p>
+          ) : null}
           {failed ? (
             <div className="grid gap-3">
               <Button

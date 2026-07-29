@@ -3,12 +3,14 @@ import { auth } from "@/auth";
 import { createJob } from "@/lib/jobs";
 import { creditsForBytes } from "@/lib/billing/config";
 import { getBillingSummary } from "@/lib/billing/credits";
+import { estimateProcessingSeconds } from "@/lib/types";
 import {
-  estimateProcessingSeconds,
+  friendlyFileLimitMessage,
+  isLikelyVideoFile,
   MAX_BYTES_PER_JOB,
   MAX_FILE_BYTES,
   MAX_FILES_PER_JOB,
-} from "@/lib/types";
+} from "@/lib/media";
 import { clientKey, rateLimit } from "@/lib/rate-limit";
 
 export async function POST(request: Request) {
@@ -37,13 +39,22 @@ export async function POST(request: Request) {
   }
   if (files.length > MAX_FILES_PER_JOB) {
     return NextResponse.json(
-      { error: `Maximum ${MAX_FILES_PER_JOB} videos per recap` },
+      { error: friendlyFileLimitMessage("count") },
+      { status: 400 }
+    );
+  }
+  if (files.some((f) => !isLikelyVideoFile(f.name, f.type))) {
+    return NextResponse.json(
+      {
+        error:
+          "We need video files (mp4, mov, m4v…). If your gallery hid the type, rename to .mp4 and try again — we’ve got you.",
+      },
       { status: 400 }
     );
   }
   if (files.some((f) => f.size > MAX_FILE_BYTES)) {
     return NextResponse.json(
-      { error: "Each video must be under 800 MB" },
+      { error: friendlyFileLimitMessage("file") },
       { status: 400 }
     );
   }
@@ -51,7 +62,7 @@ export async function POST(request: Request) {
   const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
   if (totalBytes > MAX_BYTES_PER_JOB) {
     return NextResponse.json(
-      { error: "Maximum 2 GB total per recap on this plan" },
+      { error: friendlyFileLimitMessage("total") },
       { status: 400 }
     );
   }

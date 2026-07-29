@@ -1,19 +1,29 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { estimateProcessingSeconds, formatBytes } from "@/lib/types";
 import {
-  estimateProcessingSeconds,
-  formatBytes,
+  formatLimitHint,
+  isLikelyVideoFile,
   MAX_FILES_PER_JOB,
-} from "@/lib/types";
+  validateLocalVideoBatch,
+} from "@/lib/media";
 
 type LocalFile = {
   id: string;
   file: File;
+  previewUrl: string;
   progress: number;
   status: "queued" | "uploading" | "done" | "error";
   uploadId?: string;
@@ -27,13 +37,15 @@ function createId() {
 async function uploadWithProgress(
   file: File,
   signedUrl: string,
+  contentType: string,
   onProgress: (pct: number) => void
 ) {
   const resumeKey = `upload-bytes:${file.name}:${file.size}:${file.lastModified}`;
   await new Promise<void>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", signedUrl);
-    xhr.setRequestHeader("Content-Type", file.type || "video/mp4");
+    xhr.setRequestHeader("Content-Type", contentType || "video/mp4");
+    xhr.timeout = 30 * 60 * 1000;
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable) {
         const pct = Math.round((event.loaded / event.total) * 100);
@@ -47,10 +59,25 @@ async function uploadWithProgress(
         onProgress(100);
         resolve();
       } else {
-        reject(new Error(`Upload failed (${xhr.status})`));
+        reject(
+          new Error(
+            `Upload paused at the network (${xhr.status}). Keep this tab open and try again — large clips sometimes need a second pass.`
+          )
+        );
       }
     };
-    xhr.onerror = () => reject(new Error("Network error during upload"));
+    xhr.onerror = () =>
+      reject(
+        new Error(
+          "Network hiccup while uploading. Check your connection and try again — we kept your selection."
+        )
+      );
+    xhr.ontimeout = () =>
+      reject(
+        new Error(
+          "That upload took too long on this connection. Try Wi‑Fi or a slightly smaller clip."
+        )
+      );
     xhr.send(file);
   });
 }
@@ -70,6 +97,8 @@ export function UploadWorkspace({
 }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const filesRef = useRef<LocalFile[]>([]);
   const [files, setFiles] = useState<LocalFile[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -86,6 +115,8 @@ export function UploadWorkspace({
   const [folder, setFolder] = useState("");
   const [isPro, setIsPro] = useState(false);
   const [outputQuality, setOutputQuality] = useState<"fhd" | "uhd">("fhd");
+  const [previewId, setPreviewId] = useState<string | null>(null);
+  const [musicPlaying, setMusicPlaying] = useState(false);
 
   useEffect(() => {
     fetch("/api/billing/credits")
@@ -93,7 +124,7 @@ export function UploadWorkspace({
       .then((j) => {
         if (typeof j.balance === "number") setBalance(j.balance);
         if (j.dailyLoginGrantedToday && j.dailyLoginAmount) {
-          setDailyNote(`+${j.dailyLoginAmount} daily credits`);
+          setDailyNote(`+${j.dailyLoginAmount} daily credits ready for you`);
         }
         const status = j.subscription?.status as string | undefined;
         setIsPro(status === "active" || status === "trialing");
@@ -104,7 +135,7 @@ export function UploadWorkspace({
       .then((j) => {
         if (Array.isArray(j.tracks)) setTracks(j.tracks);
         if (Array.isArray(j.moods)) setMoods(j.moods);
-        if (j.tracks?.[0]?.id) setTrackId(j.tracks[0].id);
+        if (j.tracks?.[0]?.id) setTrackId((prev) => prev || j.tracks[0].id);
       })
       .catch(() => undefined);
     fetch("/api/prefs")
@@ -119,6 +150,42 @@ export function UploadWorkspace({
       .catch(() => undefined);
   }, []);
 
+  useEffect(() => {
+    filesRef.current = files;
+  }, [files]);
+
+  // Revoke object URLs on unmount
+  useEffect(() => {
+    return () => {
+      for (const item of filesRef.current) URL.revokeObjectURL(item.previewUrl);
+    };
+  }, []);
+
+  const previewTrack = useMemo(() => {
+    if (musicMode === "none" || tracks.length === 0) return null;
+    if (musicMode === "manual") {
+      return tracks.find((t) => t.id === trackId) || tracks[0] || null;
+    }
+    return (
+      tracks.find((t) => t.mood === mood) ||
+      tracks[0] ||
+      null
+    );
+  }, [musicMode, trackId, tracks, mood]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.pause();
+    setMusicPlaying(false);
+    if (previewTrack?.previewUrl) {
+      audio.src = previewTrack.previewUrl;
+      audio.load();
+    } else {
+      audio.removeAttribute("src");
+    }
+  }, [previewTrack?.id, previewTrack?.previewUrl]);
+
   const totals = useMemo(() => {
     const count = files.length;
     const bytes = files.reduce((sum, item) => sum + item.file.size, 0);
@@ -132,17 +199,26 @@ export function UploadWorkspace({
     };
   }, [files, balance]);
 
+  const previewFile = useMemo(
+    () => files.find((f) => f.id === previewId) || null,
+    [files, previewId]
+  );
+
   const addFiles = useCallback((list: FileList | File[]) => {
-    const incoming = Array.from(list).filter((file) =>
-      file.type.startsWith("video/")
+    const raw = Array.from(list);
+    const incoming = raw.filter((file) =>
+      isLikelyVideoFile(file.name, file.type)
     );
     if (incoming.length === 0) {
-      setError("Please choose video files.");
+      setError(
+        "Please choose video files from your gallery (mp4, mov, m4v…)."
+      );
       return;
     }
-    setError(null);
+
     setFiles((current) => {
       const next = [...current];
+      const skipped: string[] = [];
       for (const file of incoming) {
         const exists = next.some(
           (item) =>
@@ -150,21 +226,61 @@ export function UploadWorkspace({
             item.file.size === file.size &&
             item.file.lastModified === file.lastModified
         );
-        if (!exists) {
-          next.push({
-            id: createId(),
-            file,
-            progress: 0,
-            status: "queued",
-          });
+        if (exists) continue;
+        if (next.length >= MAX_FILES_PER_JOB) {
+          skipped.push("count");
+          break;
         }
+        const check = validateLocalVideoBatch([
+          ...next.map((n) => n.file),
+          file,
+        ]);
+        if (!check.ok) {
+          skipped.push(check.error);
+          continue;
+        }
+        next.push({
+          id: createId(),
+          file,
+          previewUrl: URL.createObjectURL(file),
+          progress: 0,
+          status: "queued",
+        });
       }
-      return next.slice(0, MAX_FILES_PER_JOB);
+      if (skipped.length) {
+        const msg = skipped.find((s) => s !== "count") ||
+          `Take your time — up to ${MAX_FILES_PER_JOB} videos works best.`;
+        setError(msg);
+      } else {
+        setError(null);
+      }
+      return next;
     });
   }, []);
 
   function removeFile(id: string) {
-    setFiles((current) => current.filter((item) => item.id !== id));
+    setFiles((current) => {
+      const target = current.find((item) => item.id === id);
+      if (target) URL.revokeObjectURL(target.previewUrl);
+      return current.filter((item) => item.id !== id);
+    });
+    if (previewId === id) setPreviewId(null);
+  }
+
+  function toggleMusicPreview() {
+    const audio = audioRef.current;
+    if (!audio || !previewTrack) return;
+    if (musicPlaying) {
+      audio.pause();
+      setMusicPlaying(false);
+      return;
+    }
+    void audio
+      .play()
+      .then(() => setMusicPlaying(true))
+      .catch(() =>
+        setError("Couldn’t play the preview — tap again or check device sound.")
+      );
   }
 
   async function startUpload() {
@@ -172,14 +288,24 @@ export function UploadWorkspace({
       setError("Add at least one video.");
       return;
     }
+    const localCheck = validateLocalVideoBatch(files.map((f) => f.file));
+    if (!localCheck.ok) {
+      setError(localCheck.error);
+      return;
+    }
     if (!totals.enough) {
       setError(
-        `Not enough credits. Need ${totals.creditsRequired}, you have ${balance}.`
+        `Not enough credits yet. Need ${totals.creditsRequired}, you have ${balance}. We’ll wait — grab a pack when you’re ready.`
       );
       return;
     }
 
     setError(null);
+    if (audioRef.current) {
+      audioRef.current.pause();
+      setMusicPlaying(false);
+    }
+
     startTransition(async () => {
       try {
         const createRes = await fetch("/api/jobs", {
@@ -189,13 +315,16 @@ export function UploadWorkspace({
             files: files.map((item) => ({
               name: item.file.name,
               size: item.file.size,
-              type: item.file.type,
+              type: item.file.type || "video/mp4",
             })),
           }),
         });
         const createJson = await createRes.json();
         if (!createRes.ok) {
-          throw new Error(createJson.error || "Could not create job");
+          throw new Error(
+            createJson.error ||
+              "We couldn’t start this batch. Try again in a moment."
+          );
         }
 
         const jobId = createJson.job.id as string;
@@ -215,14 +344,17 @@ export function UploadWorkspace({
             body: JSON.stringify({
               fileName: item.file.name,
               size: item.file.size,
-              type: item.file.type,
+              type: item.file.type || "video/mp4",
               sortOrder: index,
               resumeUploadId: item.uploadId,
             }),
           });
           const metaJson = await metaRes.json();
           if (!metaRes.ok) {
-            throw new Error(metaJson.error || "Could not prepare upload");
+            throw new Error(
+              metaJson.error ||
+                `Couldn’t prepare “${item.file.name}”. Try picking it again.`
+            );
           }
 
           setFiles((current) =>
@@ -234,15 +366,20 @@ export function UploadWorkspace({
           );
 
           if (!metaJson.alreadyUploaded) {
-            await uploadWithProgress(item.file, metaJson.signedUrl, (pct) => {
-              setFiles((current) =>
-                current.map((entry) =>
-                  entry.id === item.id
-                    ? { ...entry, progress: pct, status: "uploading" }
-                    : entry
-                )
-              );
-            });
+            await uploadWithProgress(
+              item.file,
+              metaJson.signedUrl,
+              item.file.type || "video/mp4",
+              (pct) => {
+                setFiles((current) =>
+                  current.map((entry) =>
+                    entry.id === item.id
+                      ? { ...entry, progress: pct, status: "uploading" }
+                      : entry
+                  )
+                );
+              }
+            );
           }
 
           setFiles((current) =>
@@ -279,11 +416,13 @@ export function UploadWorkspace({
         const processJson = await processRes.json();
         if (processRes.status === 402) {
           throw new Error(
-            `Not enough credits (need ${processJson.creditsRequired}). Buy credits first.`
+            `Need ${processJson.creditsRequired} credits for this batch. Buy a pack, then we’ll pick up right here.`
           );
         }
         if (!processRes.ok) {
-          throw new Error(processJson.error || "Could not start processing");
+          throw new Error(
+            processJson.error || "Could not start processing — try again."
+          );
         }
 
         router.push(`/processing/${jobId}`);
@@ -295,6 +434,13 @@ export function UploadWorkspace({
 
   return (
     <div className="space-y-6">
+      <audio
+        ref={audioRef}
+        preload="metadata"
+        onEnded={() => setMusicPlaying(false)}
+        className="hidden"
+      />
+
       <div className="rounded-[16px] bg-neutral-50 p-4 text-sm shadow-sm">
         <div className="flex items-center justify-between gap-3">
           <span className="text-neutral-500">Your credits</span>
@@ -377,6 +523,26 @@ export function UploadWorkspace({
               ))}
           </select>
         ) : null}
+        {previewTrack && musicMode !== "none" ? (
+          <div className="flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-neutral-900">
+                {musicMode === "auto" ? "Auto pick · " : ""}
+                {previewTrack.title}
+              </p>
+              <p className="truncate text-xs text-neutral-500">
+                {previewTrack.vibe} · tap play to hear it
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={toggleMusicPreview}
+              className="h-11 shrink-0 rounded-xl bg-neutral-900 px-4 text-sm font-medium text-white"
+            >
+              {musicPlaying ? "Pause" : "Play"}
+            </button>
+          </div>
+        ) : null}
         <p className="text-xs text-neutral-500">
           Mostly soundless under the track — big laughs and cheers stay.
         </p>
@@ -438,7 +604,7 @@ export function UploadWorkspace({
           if (e.dataTransfer.files?.length) addFiles(e.dataTransfer.files);
         }}
         onClick={() => inputRef.current?.click()}
-        className={`flex min-h-[220px] w-full flex-col items-center justify-center rounded-[16px] border border-dashed px-6 text-center transition ${
+        className={`flex min-h-[200px] w-full flex-col items-center justify-center rounded-[16px] border border-dashed px-6 text-center transition ${
           dragOver
             ? "border-green-600 bg-green-50"
             : "border-neutral-300 bg-neutral-50"
@@ -448,12 +614,12 @@ export function UploadWorkspace({
           Choose videos from your gallery
         </p>
         <p className="mt-2 text-sm text-neutral-500">
-          or drag and drop · up to {MAX_FILES_PER_JOB} files · 2 GB total
+          or drag and drop · {formatLimitHint()}
         </p>
         <input
           ref={inputRef}
           type="file"
-          accept="video/*,.mp4,.mov,.m4v,.webm"
+          accept="video/*,.mp4,.mov,.m4v,.webm,.mkv,.3gp"
           multiple
           className="hidden"
           onChange={(e) => {
@@ -488,55 +654,77 @@ export function UploadWorkspace({
           {!totals.enough ? (
             <p className="mt-3 text-sm text-amber-700">
               You need {totals.creditsRequired - balance} more credits before
-              processing.
+              processing — no rush.
             </p>
           ) : (
             <p className="mt-3 text-sm text-neutral-500">
-              Clear cost: {totals.creditsRequired} credits now · ~{" "}
-              {Math.ceil(totals.estimate / 60)} min · no surprise fees.
+              Clear cost: {totals.creditsRequired} credits · ~{" "}
+              {Math.ceil(totals.estimate / 60)} min · tap a thumbnail to confirm
+              each clip.
             </p>
           )}
         </div>
       ) : null}
 
-      <ul className="space-y-3">
-        {files.map((item) => (
-          <li
-            key={item.id}
-            className="rounded-[16px] bg-neutral-50 p-4 shadow-sm"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium">{item.file.name}</p>
-                <p className="mt-1 text-sm text-neutral-500">
-                  {formatBytes(item.file.size)}
-                  {item.status === "uploading"
-                    ? ` · ${item.progress}%`
-                    : item.status === "done"
-                      ? " · uploaded"
-                      : ""}
-                </p>
-              </div>
+      {files.length > 0 ? (
+        <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {files.map((item) => (
+            <li key={item.id} className="relative">
               <button
                 type="button"
-                className="min-h-11 min-w-11 text-sm text-neutral-500"
+                onClick={() => setPreviewId(item.id)}
+                className="group relative block w-full overflow-hidden rounded-[16px] bg-neutral-900 shadow-sm"
+                aria-label={`Preview ${item.file.name}`}
+              >
+                <video
+                  src={item.previewUrl}
+                  muted
+                  playsInline
+                  preload="metadata"
+                  className="aspect-square w-full object-cover opacity-95 transition group-hover:opacity-100"
+                  onLoadedMetadata={(e) => {
+                    try {
+                      e.currentTarget.currentTime = 0.1;
+                    } catch {
+                      /* ignore seek */
+                    }
+                  }}
+                />
+                <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-2 pb-2 pt-8 text-left">
+                  <span className="block truncate text-xs font-medium text-white">
+                    {item.file.name}
+                  </span>
+                  <span className="text-[11px] text-white/80">
+                    {formatBytes(item.file.size)}
+                    {item.status === "uploading"
+                      ? ` · ${item.progress}%`
+                      : item.status === "done"
+                        ? " · uploaded"
+                        : " · tap to play"}
+                  </span>
+                </span>
+              </button>
+              <button
+                type="button"
+                className="absolute right-2 top-2 min-h-9 min-w-9 rounded-full bg-black/55 text-sm text-white"
                 onClick={() => removeFile(item.id)}
                 disabled={isPending}
+                aria-label="Remove video"
               >
-                Remove
+                ×
               </button>
-            </div>
-            {item.status === "uploading" || item.status === "done" ? (
-              <div className="mt-3">
-                <Progress value={item.progress} className="h-2" />
-              </div>
-            ) : null}
-            {item.error ? (
-              <p className="mt-2 text-sm text-red-600">{item.error}</p>
-            ) : null}
-          </li>
-        ))}
-      </ul>
+              {item.status === "uploading" || item.status === "done" ? (
+                <div className="mt-2 px-1">
+                  <Progress value={item.progress} className="h-1.5" />
+                </div>
+              ) : null}
+              {item.error ? (
+                <p className="mt-1 text-xs text-red-600">{item.error}</p>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
 
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
@@ -547,15 +735,61 @@ export function UploadWorkspace({
         onClick={startUpload}
       >
         {isPending
-          ? "Uploading…"
+          ? "Uploading with care…"
           : totals.enough
             ? `Create recap · ${totals.creditsRequired} credits`
             : "Buy credits to continue"}
       </Button>
       {!totals.enough && files.length > 0 ? (
-        <Button asChild variant="secondary" className="h-12 w-full rounded-[16px]">
+        <Button
+          asChild
+          variant="secondary"
+          className="h-12 w-full rounded-[16px]"
+        >
           <Link href="/pricing">Go to pricing</Link>
         </Button>
+      ) : null}
+
+      {previewFile ? (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/55 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Video preview"
+          onClick={() => setPreviewId(null)}
+        >
+          <div
+            className="w-full max-w-md overflow-hidden rounded-[20px] bg-neutral-950 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <video
+              key={previewFile.id}
+              src={previewFile.previewUrl}
+              className="aspect-video w-full bg-black"
+              controls
+              playsInline
+              autoPlay
+            />
+            <div className="flex items-center justify-between gap-3 px-4 py-3">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-white">
+                  {previewFile.file.name}
+                </p>
+                <p className="text-xs text-neutral-400">
+                  {formatBytes(previewFile.file.size)} · confirm it’s the right
+                  clip
+                </p>
+              </div>
+              <button
+                type="button"
+                className="h-11 shrink-0 rounded-xl bg-white px-4 text-sm font-medium text-neutral-900"
+                onClick={() => setPreviewId(null)}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   );

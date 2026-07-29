@@ -2,6 +2,7 @@ import { requireUser } from "@/lib/session";
 import { getBillingSummary } from "@/lib/billing/credits";
 import { UploadWorkspace } from "@/components/upload-workspace";
 import { AppHeader } from "@/components/app-header";
+import { uploadCareLine, welcomeLine } from "@/lib/greeting";
 
 export default async function UploadPage() {
   const user = await requireUser();
@@ -12,11 +13,13 @@ export default async function UploadPage() {
       <AppHeader active="upload" />
 
       <section className="mt-10">
-        <h1 className="text-2xl font-medium tracking-tight">Upload memories</h1>
-        <p className="mt-2 text-neutral-500">
-          Pick videos from your gallery. We build landscape + vertical. Originals
-          stay untouched.
+        <p className="text-sm font-medium text-green-800">
+          {welcomeLine({ name: user.name })}
         </p>
+        <h1 className="mt-2 text-2xl font-medium tracking-tight">
+          Upload memories
+        </h1>
+        <p className="mt-2 text-neutral-500">{uploadCareLine()}</p>
         <div className="mt-8">
           <UploadWorkspace initialBalance={summary.balance} />
         </div>

@@ -8,7 +8,12 @@ import {
 } from "@/lib/jobs";
 import { getServiceSupabase } from "@/lib/supabase/admin";
 import { nanoid } from "nanoid";
-import { MAX_FILE_BYTES } from "@/lib/types";
+import {
+  friendlyFileLimitMessage,
+  inferVideoMime,
+  isLikelyVideoFile,
+  MAX_FILE_BYTES,
+} from "@/lib/media";
 
 type Params = { params: Promise<{ jobId: string }> };
 
@@ -33,14 +38,27 @@ export async function POST(request: Request, { params }: Params) {
   };
 
   if (!body.fileName || !body.size) {
-    return NextResponse.json({ error: "Invalid file metadata" }, { status: 400 });
+    return NextResponse.json(
+      { error: "That file didn’t come through cleanly. Try choosing it again from your gallery." },
+      { status: 400 }
+    );
   }
   if (body.size > MAX_FILE_BYTES) {
-    return NextResponse.json({ error: "File too large (max 800 MB)" }, { status: 400 });
+    return NextResponse.json(
+      { error: friendlyFileLimitMessage("file") },
+      { status: 400 }
+    );
   }
-  if (!body.type?.startsWith("video/")) {
-    return NextResponse.json({ error: "Only video files are supported" }, { status: 400 });
+  if (!isLikelyVideoFile(body.fileName, body.type)) {
+    return NextResponse.json(
+      {
+        error:
+          "That doesn’t look like a video we can read. Try mp4 / mov — or pick it again from the gallery.",
+      },
+      { status: 400 }
+    );
   }
+  const mimeType = inferVideoMime(body.fileName, body.type);
 
   const supabase = getServiceSupabase();
 
@@ -82,7 +100,7 @@ export async function POST(request: Request, { params }: Params) {
     userId: session.user.id,
     storagePath,
     fileName: body.fileName,
-    mimeType: body.type,
+    mimeType,
     sizeBytes: body.size,
     sortOrder: body.sortOrder ?? 0,
   });

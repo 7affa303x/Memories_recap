@@ -10,6 +10,12 @@ import { AppHeader } from "@/components/app-header";
 import { RemixPanel } from "@/components/remix-panel";
 import Link from "next/link";
 import { formatBytes } from "@/lib/types";
+import {
+  resultCareLine,
+  softProNudgeLine,
+  welcomeLine,
+} from "@/lib/greeting";
+import { getBillingSummary } from "@/lib/billing/credits";
 
 type Props = { params: Promise<{ jobId: string }> };
 
@@ -60,17 +66,29 @@ export default async function ResultPage({ params }: Props) {
     ? new Date(recap.expires_at).toLocaleDateString()
     : null;
 
+  let showProNudge = false;
+  try {
+    const summary = await getBillingSummary(user.id, user.email);
+    const status = summary.subscription?.status;
+    showProNudge = !(status === "active" || status === "trialing");
+  } catch {
+    showProNudge = true;
+  }
+
   return (
     <main className="mx-auto flex min-h-full w-full max-w-lg flex-col px-6 pb-16 pt-8">
       <AppHeader />
 
       <section className="mt-10 space-y-6">
         <div>
-          <p className="text-sm font-medium text-green-700">Success</p>
+          <p className="text-sm font-medium text-green-700">
+            {welcomeLine({ name: user.name })}
+          </p>
           <h1 className="mt-1 text-2xl font-medium tracking-tight">
             Your recap is ready
           </h1>
-          <p className="mt-2 text-neutral-500">
+          <p className="mt-2 text-neutral-500">{resultCareLine()}</p>
+          <p className="mt-1 text-sm text-neutral-400">
             {job.folder ? `${job.folder} · ` : ""}
             Generation v{recap.current_generation || 1}
             {expiresLabel ? ` · kept until ${expiresLabel}` : ""}
@@ -224,6 +242,19 @@ export default async function ResultPage({ params }: Props) {
         />
 
         <ShareControls jobId={jobId} initialShareUrl={initialShareUrl} />
+
+        {showProNudge ? (
+          <div className="rounded-[16px] bg-neutral-50 p-4 text-sm text-neutral-600 shadow-sm">
+            <p className="font-medium text-neutral-900">A gentle next step</p>
+            <p className="mt-2">{softProNudgeLine()}</p>
+            <Link
+              href="/pricing"
+              className="mt-3 inline-block text-green-700 underline"
+            >
+              See Pro quietly
+            </Link>
+          </div>
+        ) : null}
 
         <div className="rounded-[16px] bg-neutral-50 p-4 text-sm text-neutral-600 shadow-sm">
           <p className="font-medium text-neutral-900">Commercial use</p>

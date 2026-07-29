@@ -116,9 +116,11 @@ export const STAGE_LABELS: Record<string, string> = {
   failed: "Something went wrong",
 };
 
-export const MAX_FILES_PER_JOB = 12;
-export const MAX_BYTES_PER_JOB = 2 * 1024 * 1024 * 1024;
-export const MAX_FILE_BYTES = 800 * 1024 * 1024;
+export {
+  MAX_FILES_PER_JOB,
+  MAX_BYTES_PER_JOB,
+  MAX_FILE_BYTES,
+} from "@/lib/media";
 export const RECAP_TTL_DAYS = 30;
 export const RECAP_TTL_DAYS_PRO = 90;
 

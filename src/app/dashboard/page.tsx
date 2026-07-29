@@ -5,6 +5,7 @@ import { listJobsForUser } from "@/lib/jobs";
 import { Button } from "@/components/ui/button";
 import { STAGE_LABELS } from "@/lib/types";
 import { AppHeader } from "@/components/app-header";
+import { dashboardCareLine, welcomeLine } from "@/lib/greeting";
 
 export const metadata: Metadata = {
   title: "Dashboard · Memories Recap",
@@ -40,9 +41,14 @@ export default async function DashboardPage({
       <section className="mt-10 space-y-6">
         <div className="flex items-end justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-medium tracking-tight">Your recaps</h1>
+            <p className="text-sm font-medium text-green-800">
+              {welcomeLine({ name: user.name })}
+            </p>
+            <h1 className="mt-2 text-2xl font-medium tracking-tight">
+              Your recaps
+            </h1>
             <p className="mt-2 text-neutral-500">
-              History, folders, and versions — built to keep coming back.
+              {dashboardCareLine(jobs.length)}
             </p>
           </div>
           <Button asChild className="h-11 rounded-[16px]">
