@@ -1,18 +1,19 @@
 # Music catalog
 
-## Temporary beds — replace before commercial launch
-Files in this folder are **temporary algorithmic beds** (SoundHelix examples)
-for development and early testing only. They **must be replaced with properly
-licensed tracks** (Uppbeat / Epidemic Sound / Pixabay or equivalent) before
-commercial launch. Do not ship these beds as the production library.
+## Active: NCS (NoCopyrightSounds)
+Famous free-to-use tracks (with credit) live under `public/music/ncs/`:
 
-## Active now
-Free algorithmic beds in this folder (SoundHelix examples, temporary).
+- Disfigure — Blank
+- Elektronomia — Sky High
+- Lost Sky — Dreams / Fearless
+- Warriyo — Mortals
+- Unknown Brain — Why Do I (Instrumental)
+- Deaf Kev — Invincible
+- Sub Urban — Cradles
+
+Mood auto-picks use short edits in `public/music/{joyful,nostalgic,chill,epic}.mp3`.
+
+When using NCS in a published video, keep the credit line (shown in the track metadata / UI).
 
 ## Paid library (hidden)
-Set `MUSIC_PAID_ENABLED=true` and populate `PAID_MUSIC_TRACKS` in `src/lib/music.ts`
-(or drop files under `public/music/paid/` and register them).
-
-Recommended paid providers:
-- Uppbeat (~€8–15/mo) — best first paid step
-- Epidemic Sound (~$15–20/mo) — larger “familiar” vibe library
+Set `MUSIC_PAID_ENABLED=true` and register tracks in `src/lib/music.ts`.

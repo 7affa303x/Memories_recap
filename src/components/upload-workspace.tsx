@@ -136,6 +136,9 @@ type MusicTrackOption = {
   mood: string;
   vibe: string;
   previewUrl: string;
+  artist?: string | null;
+  provider?: string;
+  credit?: string | null;
 };
 
 export function UploadWorkspace({
@@ -874,6 +877,7 @@ export function UploadWorkspace({
               .concat(tracks.filter((t) => t.mood !== mood))
               .map((t) => (
                 <option key={t.id} value={t.id}>
+                  {t.artist ? `${t.artist} — ` : ""}
                   {t.title} · {t.vibe}
                 </option>
               ))}
@@ -884,11 +888,18 @@ export function UploadWorkspace({
             <div className="min-w-0">
               <p className="truncate text-sm font-medium text-neutral-900">
                 {musicMode === "auto" ? "Auto pick · " : ""}
-                {previewTrack.title}
+                {previewTrack.artist
+                  ? `${previewTrack.artist} — ${previewTrack.title}`
+                  : previewTrack.title}
               </p>
               <p className="truncate text-xs text-neutral-500">
                 {previewTrack.vibe} · tap play to hear it
               </p>
+              {previewTrack.provider === "ncs" ? (
+                <p className="mt-1 truncate text-[11px] text-neutral-400">
+                  NCS — free with credit
+                </p>
+              ) : null}
             </div>
             <button
               type="button"

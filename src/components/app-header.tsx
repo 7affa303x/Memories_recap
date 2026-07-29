@@ -1,12 +1,15 @@
+import Image from "next/image";
 import Link from "next/link";
 import { Logo } from "@/components/logo";
 import { signOutAction } from "@/app/actions/auth";
+import { getOptionalUser } from "@/lib/session";
 
-export function AppHeader({
+export async function AppHeader({
   active,
 }: {
   active?: "upload" | "dashboard" | "billing" | "pricing" | "account";
 }) {
+  const user = await getOptionalUser();
   const linkClass = (key: typeof active) =>
     `min-h-11 px-2 text-sm ${
       active === key ? "font-medium text-neutral-900" : "text-neutral-500"
@@ -39,12 +42,38 @@ export function AppHeader({
 
   return (
     <header className="flex items-center justify-between gap-3">
-      <Logo />
-      {/* Desktop: full nav */}
+      {user ? (
+        <div className="flex min-w-0 items-center gap-3">
+          {user.image ? (
+            <Image
+              src={user.image}
+              alt={user.name || "Google account"}
+              width={36}
+              height={36}
+              className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-neutral-200"
+              unoptimized
+            />
+          ) : (
+            <div
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-green-100 text-sm font-medium text-green-900"
+              aria-hidden
+            >
+              {(user.name || user.email || "?").charAt(0).toUpperCase()}
+            </div>
+          )}
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-neutral-900">
+              {user.name || "Your account"}
+            </p>
+            <p className="truncate text-xs text-neutral-500">{user.email}</p>
+          </div>
+        </div>
+      ) : (
+        <Logo />
+      )}
       <nav className="hidden items-center justify-end gap-x-1 sm:flex">
         {navLinks}
       </nav>
-      {/* Mobile: compact menu */}
       <details className="relative sm:hidden">
         <summary className="flex min-h-11 cursor-pointer list-none items-center rounded-xl bg-neutral-100 px-3 text-sm font-medium text-neutral-800 marker:content-none [&::-webkit-details-marker]:hidden">
           Menu

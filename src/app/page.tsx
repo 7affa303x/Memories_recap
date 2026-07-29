@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import { getOptionalUser } from "@/lib/session";
 import { signOutAction } from "@/app/actions/auth";
 import { Button } from "@/components/ui/button";
@@ -100,44 +99,6 @@ export default async function LandingPage({
               4. Watch, download, and share
             </li>
           </ol>
-        </section>
-
-        <section className="mt-16 space-y-4">
-          <h2 className="font-display text-2xl font-semibold tracking-tight text-neutral-900">
-            See a sample
-          </h2>
-          <p className="text-sm text-neutral-500">
-            End-card stills from a finished recap — landscape for the couch,
-            vertical for stories.{" "}
-            <a href="/examples" className="text-green-800 underline underline-offset-2">
-              More examples
-            </a>
-            {" · "}
-            <a href="/upload" className="text-green-800 underline underline-offset-2">
-              Try it with your own clips
-            </a>
-            .
-          </p>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="overflow-hidden rounded-[16px] bg-neutral-900">
-              <Image
-                src="/brand/end-card-landscape.png"
-                alt="Sample landscape recap end card"
-                width={960}
-                height={540}
-                className="aspect-video w-full object-cover"
-              />
-            </div>
-            <div className="mx-auto w-full max-w-[220px] overflow-hidden rounded-[16px] bg-neutral-900 sm:mx-0 sm:max-w-none">
-              <Image
-                src="/brand/end-card-vertical.png"
-                alt="Sample vertical recap end card"
-                width={540}
-                height={960}
-                className="aspect-[9/16] w-full object-cover"
-              />
-            </div>
-          </div>
         </section>
 
         <section className="mt-16 space-y-4">

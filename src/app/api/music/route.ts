@@ -6,8 +6,11 @@ export async function GET() {
   const tracks = listMusicTracks().map((t) => ({
     id: t.id,
     title: t.title,
+    artist: t.artist || null,
     mood: t.mood,
     vibe: t.vibe,
+    provider: t.provider,
+    credit: t.credit || null,
     previewUrl: t.publicPath,
   }));
 

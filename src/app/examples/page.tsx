@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
@@ -8,7 +7,7 @@ import { BRAND_NAME } from "@/lib/brand";
 export const metadata: Metadata = {
   title: `Examples · ${BRAND_NAME}`,
   description:
-    "Sample stills from Memories Recap — landscape and vertical end cards. Try it with your own clips.",
+    "See how Memories Recap turns messy camera rolls into calm landscape and vertical stories.",
 };
 
 export default function ExamplesPage() {
@@ -24,35 +23,24 @@ export default function ExamplesPage() {
 
         <section className="mt-10 space-y-4">
           <h1 className="font-display text-3xl font-semibold tracking-tight text-green-900">
-            Examples
+            How a recap feels
           </h1>
           <p className="text-neutral-500">
-            Still frames from a finished recap — not staged testimonials. Upload
-            your own clips to see the full motion cut.
+            We don’t show staged end-card stills as “examples”. The real product
+            is motion: pick clips, choose a mood, and get landscape + vertical.
           </p>
         </section>
 
-        <section className="mt-8 grid gap-4 sm:grid-cols-2">
-          <div className="overflow-hidden rounded-[16px] bg-neutral-900 shadow-sm">
-            <Image
-              src="/brand/end-card-landscape.png"
-              alt="Sample landscape recap still"
-              width={960}
-              height={540}
-              className="aspect-video w-full object-cover"
-              priority
-            />
-            <p className="px-3 py-2 text-xs text-neutral-300">Landscape still</p>
-          </div>
-          <div className="mx-auto w-full max-w-[220px] overflow-hidden rounded-[16px] bg-neutral-900 shadow-sm sm:mx-0 sm:max-w-none">
-            <Image
-              src="/brand/end-card-vertical.png"
-              alt="Sample vertical recap still"
-              width={540}
-              height={960}
-              className="aspect-[9/16] w-full object-cover"
-            />
-            <p className="px-3 py-2 text-xs text-neutral-300">Vertical still</p>
+        <section className="mt-8 overflow-hidden rounded-[20px] border border-green-100 bg-neutral-900 shadow-sm">
+          <div className="aspect-video bg-[linear-gradient(135deg,#14532d_0%,#052e16_55%,#166534_100%)] p-6 text-white">
+            <p className="text-sm text-green-100/90">What you get</p>
+            <p className="mt-8 font-display text-3xl font-semibold leading-snug">
+              From messy camera rolls → one calm story.
+            </p>
+            <p className="mt-4 max-w-sm text-sm text-green-50/90">
+              Smart moment selection, NCS mood music, and exports ready for the
+              couch or Stories.
+            </p>
           </div>
         </section>
 

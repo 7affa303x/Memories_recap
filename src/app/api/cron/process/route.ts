@@ -258,13 +258,25 @@ export async function GET(request: Request) {
     });
   }
 
+  // Engagement emails (welcome already on signup; this handles review / re-engage / low credits)
+  let emailCampaign: unknown = null;
+  try {
+    const { runEmailCampaigns } = await import("@/lib/email/campaigns");
+    emailCampaign = await runEmailCampaigns(40);
+  } catch (error) {
+    logInfo("cron_email_campaign_error", {
+      error: error instanceof Error ? error.message : "unknown",
+    });
+  }
+
   const supabase = getServiceSupabase();
-  logInfo("cron_process", { picked: results.length, ttlCleaned });
+  logInfo("cron_process", { picked: results.length, ttlCleaned, emailCampaign });
 
   return NextResponse.json({
     ok: true,
     results,
     ttlCleaned,
+    emailCampaign,
     cleanedHint: true,
     supabase: Boolean(supabase),
   });

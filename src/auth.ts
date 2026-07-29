@@ -81,17 +81,32 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
       return true;
     },
-    async jwt({ token, account, profile }) {
+    async jwt({ token, account, profile, user }) {
       if (account?.providerAccountId) {
         token.uid = account.providerAccountId;
       } else if (!token.uid && profile && "sub" in profile && profile.sub) {
         token.uid = profile.sub;
       }
+      // Persist Google profile photo like Gmail (JWT sessions drop it otherwise)
+      const picture =
+        (user as { image?: string | null } | undefined)?.image ||
+        (profile && "picture" in profile
+          ? String((profile as { picture?: string }).picture || "")
+          : "") ||
+        token.picture;
+      if (picture) token.picture = picture;
+      if (user?.name) token.name = user.name;
+      if (user?.email) token.email = user.email;
       return token;
     },
     async session({ session, token }) {
       if (session.user && token.uid) {
         session.user.id = String(token.uid);
+      }
+      if (session.user) {
+        if (token.picture) session.user.image = String(token.picture);
+        if (token.name) session.user.name = String(token.name);
+        if (token.email) session.user.email = String(token.email);
       }
       return session;
     },
