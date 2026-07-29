@@ -20,6 +20,7 @@ import {
   selectBestClips,
   writeConcatList,
 } from "@/lib/smart-select";
+import { mixBackgroundMusic } from "@/lib/music/mix";
 import { logError, logInfo } from "@/lib/logger";
 
 function run(bin: string, args: string[]) {
@@ -169,8 +170,8 @@ export async function processJob(jobId: string, userId: string) {
     await updateJob(jobId, userId, {
       status: "rendering",
       stage: "rendering",
-      progress: 78,
-      eta_seconds: 25,
+      progress: 75,
+      eta_seconds: 30,
     });
 
     const verticalLocal = join(workDir, "vertical.mp4");
@@ -193,12 +194,38 @@ export async function processJob(jobId: string, userId: string) {
       verticalLocal,
     ]);
 
+    // Mix NCS background music into both outputs
+    const landscapeWithMusic = join(workDir, "landscape-music.mp4");
+    const verticalWithMusic = join(workDir, "vertical-music.mp4");
+    try {
+      await mixBackgroundMusic(bin, landscapeLocal, landscapeWithMusic, undefined, workDir);
+      await appendJobLog(userId, jobId, "music_added", { landscape: true });
+    } catch {
+      // Music mixing is non-critical; use original if it fails
+      const { copyFile } = await import("node:fs/promises");
+      await copyFile(landscapeLocal, landscapeWithMusic);
+      logError("music_mix_failed_landscape", { jobId });
+    }
+
+    await updateJob(jobId, userId, {
+      progress: 85,
+      eta_seconds: 20,
+    });
+
+    try {
+      await mixBackgroundMusic(bin, verticalLocal, verticalWithMusic, undefined, workDir);
+      await appendJobLog(userId, jobId, "music_added", { vertical: true });
+    } catch {
+      const { copyFile } = await import("node:fs/promises");
+      await copyFile(verticalLocal, verticalWithMusic);
+      logError("music_mix_failed_vertical", { jobId });
+    }
+
     const supabase = getServiceSupabase();
-    // Private outputs under memories bucket
     const landscapePath = `outputs/${userId}/${jobId}/landscape.mp4`;
     const verticalPath = `outputs/${userId}/${jobId}/vertical.mp4`;
-    const landscapeBytes = await readFile(landscapeLocal);
-    const verticalBytes = await readFile(verticalLocal);
+    const landscapeBytes = await readFile(landscapeWithMusic);
+    const verticalBytes = await readFile(verticalWithMusic);
 
     const upLandscape = await supabase.storage
       .from("memories")
@@ -216,7 +243,7 @@ export async function processJob(jobId: string, userId: string) {
       });
     if (upVertical.error) throw new Error(upVertical.error.message);
 
-    const duration = await probeDuration(bin, landscapeLocal);
+    const duration = await probeDuration(bin, landscapeWithMusic);
     await upsertRecap({
       jobId,
       userId,
