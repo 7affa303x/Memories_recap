@@ -160,7 +160,9 @@ export async function updateJob(
       | "share_password_hash"
       | "credits_charged"
       | "title"
+      | "folder"
       | "recap_options"
+      | "recap_generation"
     >
   >
 ) {
@@ -245,22 +247,46 @@ export async function upsertRecap(input: {
   landscapePath: string;
   verticalPath: string;
   durationSeconds: number;
+  highlightsPath?: string | null;
+  storyPath?: string | null;
+  tiktokPath?: string | null;
+  mood?: string | null;
+  ttlDays?: number;
+  generation?: number;
 }) {
   const existing = await readJson<RecapRow>(
     `recaps/${input.userId}/${input.jobId}.json`
   );
-  const expiresAt = new Date(
-    Date.now() + RECAP_TTL_DAYS * 24 * 60 * 60 * 1000
-  ).toISOString();
+  const ttl = input.ttlDays ?? RECAP_TTL_DAYS;
+  const expiresAt = new Date(Date.now() + ttl * 24 * 60 * 60 * 1000).toISOString();
+  const generation =
+    input.generation ??
+    (existing?.current_generation ? existing.current_generation + 1 : 1);
+  const versionEntry = {
+    generation,
+    landscape_path: input.landscapePath,
+    vertical_path: input.verticalPath,
+    highlights_path: input.highlightsPath ?? null,
+    story_path: input.storyPath ?? null,
+    tiktok_path: input.tiktokPath ?? null,
+    mood: input.mood ?? null,
+    created_at: new Date().toISOString(),
+  };
+  const versions = [...(existing?.versions || []), versionEntry].slice(-12);
   const recap: RecapRow = {
     id: existing?.id ?? jobId(),
     job_id: input.jobId,
     user_id: input.userId,
     landscape_path: input.landscapePath,
     vertical_path: input.verticalPath,
+    highlights_path: input.highlightsPath ?? null,
+    story_path: input.storyPath ?? null,
+    tiktok_path: input.tiktokPath ?? null,
     duration_seconds: input.durationSeconds,
     expires_at: expiresAt,
     created_at: existing?.created_at ?? new Date().toISOString(),
+    current_generation: generation,
+    versions,
   };
   await writeJson(`recaps/${input.userId}/${input.jobId}.json`, recap);
   return recap;
@@ -273,7 +299,11 @@ export async function getRecap(jobIdValue: string, userId: string) {
 export async function ensureShareLink(
   jobIdValue: string,
   userId: string,
-  options?: { expiresInDays?: number; password?: string | null }
+  options?: {
+    expiresInDays?: number;
+    password?: string | null;
+    audience?: "public" | "family" | null;
+  }
 ) {
   const job = await getJobForUser(jobIdValue, userId);
   if (!job) throw new Error("Job not found");
@@ -290,6 +320,8 @@ export async function ensureShareLink(
     ? hashSharePassword(options.password)
     : job.share_password_hash;
 
+  const audience = options?.audience ?? null;
+
   const updated = await updateJob(jobIdValue, userId, {
     share_token: token,
     share_expires_at: expiresAt,
@@ -303,9 +335,10 @@ export async function ensureShareLink(
     expires_at: expiresAt,
     password_hash: passwordHash,
     created_at: new Date().toISOString(),
+    audience,
   };
   await writeJson(`shares/${token}.json`, index);
-  return { job: updated, token, expiresAt };
+  return { job: updated, token, expiresAt, audience };
 }
 
 export async function getShareByToken(token: string) {

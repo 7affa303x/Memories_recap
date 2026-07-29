@@ -83,6 +83,7 @@ export function UploadWorkspace({
   const [tracks, setTracks] = useState<MusicTrackOption[]>([]);
   const [moods, setMoods] = useState<Array<{ id: string; label: string }>>([]);
   const [dailyNote, setDailyNote] = useState<string | null>(null);
+  const [folder, setFolder] = useState("");
   const [isPro, setIsPro] = useState(false);
   const [outputQuality, setOutputQuality] = useState<"fhd" | "uhd">("fhd");
 
@@ -104,6 +105,16 @@ export function UploadWorkspace({
         if (Array.isArray(j.tracks)) setTracks(j.tracks);
         if (Array.isArray(j.moods)) setMoods(j.moods);
         if (j.tracks?.[0]?.id) setTrackId(j.tracks[0].id);
+      })
+      .catch(() => undefined);
+    fetch("/api/prefs")
+      .then((r) => r.json())
+      .then((p) => {
+        if (p.defaultMood) setMood(p.defaultMood);
+        if (p.defaultMusicMode) setMusicMode(p.defaultMusicMode);
+        if (p.defaultTrackId) setTrackId(p.defaultTrackId);
+        if (p.defaultOutputQuality) setOutputQuality(p.defaultOutputQuality);
+        if (p.lastFolder) setFolder(p.lastFolder);
       })
       .catch(() => undefined);
   }, []);
@@ -251,8 +262,20 @@ export function UploadWorkspace({
             mood,
             trackId: musicMode === "manual" ? trackId : null,
             outputQuality: isPro ? outputQuality : "fhd",
+            folder: folder.trim() || null,
           }),
         });
+        fetch("/api/prefs", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            defaultMood: mood,
+            defaultMusicMode: musicMode,
+            defaultTrackId: musicMode === "manual" ? trackId : null,
+            defaultOutputQuality: isPro ? outputQuality : "fhd",
+            lastFolder: folder.trim() || null,
+          }),
+        }).catch(() => undefined);
         const processJson = await processRes.json();
         if (processRes.status === 402) {
           throw new Error(
@@ -290,6 +313,15 @@ export function UploadWorkspace({
 
       <div className="space-y-3 rounded-[16px] bg-neutral-50 p-4 shadow-sm">
         <p className="text-sm font-medium text-neutral-900">Recap style</p>
+        <label className="block text-sm text-neutral-500">
+          Folder (optional)
+          <input
+            className="mt-1 h-11 w-full rounded-xl border border-neutral-200 bg-white px-3 text-sm text-neutral-900"
+            placeholder="Wedding · Trip · Family"
+            value={folder}
+            onChange={(e) => setFolder(e.target.value)}
+          />
+        </label>
         <div className="grid gap-2 sm:grid-cols-4">
           {moods.map((m) => (
             <button
@@ -458,7 +490,12 @@ export function UploadWorkspace({
               You need {totals.creditsRequired - balance} more credits before
               processing.
             </p>
-          ) : null}
+          ) : (
+            <p className="mt-3 text-sm text-neutral-500">
+              Clear cost: {totals.creditsRequired} credits now · ~{" "}
+              {Math.ceil(totals.estimate / 60)} min · no surprise fees.
+            </p>
+          )}
         </div>
       ) : null}
 

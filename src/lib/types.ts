@@ -24,6 +24,7 @@ export type RecapOptions = {
   mood?: "joyful" | "nostalgic" | "chill" | "epic" | null;
   /** Pro-only: uhd = 4K landscape / 4K-tall vertical */
   outputQuality?: "fhd" | "uhd" | null;
+  folder?: string | null;
 };
 
 export type JobRow = {
@@ -42,8 +43,12 @@ export type JobRow = {
   share_password_hash: string | null;
   credits_charged: number | null;
   title: string | null;
+  folder?: string | null;
   recap_options?: RecapOptions | null;
+  /** Concurrent write counter */
   version: number;
+  /** Recap render generation (v1, v2…) */
+  recap_generation?: number;
   created_at: string;
   updated_at: string;
   completed_at: string | null;
@@ -62,15 +67,31 @@ export type UploadRow = {
   created_at: string;
 };
 
+export type RecapVersion = {
+  generation: number;
+  landscape_path: string;
+  vertical_path: string;
+  highlights_path?: string | null;
+  story_path?: string | null;
+  tiktok_path?: string | null;
+  mood?: string | null;
+  created_at: string;
+};
+
 export type RecapRow = {
   id: string;
   job_id: string;
   user_id: string;
   landscape_path: string | null;
   vertical_path: string | null;
+  highlights_path?: string | null;
+  story_path?: string | null;
+  tiktok_path?: string | null;
   duration_seconds: number | null;
   expires_at: string | null;
   created_at: string;
+  current_generation?: number;
+  versions?: RecapVersion[];
 };
 
 export type ShareIndex = {
@@ -80,6 +101,7 @@ export type ShareIndex = {
   expires_at: string | null;
   password_hash: string | null;
   created_at: string;
+  audience?: "public" | "family" | null;
 };
 
 export const STAGE_LABELS: Record<string, string> = {
@@ -95,9 +117,10 @@ export const STAGE_LABELS: Record<string, string> = {
 };
 
 export const MAX_FILES_PER_JOB = 12;
-export const MAX_BYTES_PER_JOB = 2 * 1024 * 1024 * 1024; // 2 GB safer for Vercel
+export const MAX_BYTES_PER_JOB = 2 * 1024 * 1024 * 1024;
 export const MAX_FILE_BYTES = 800 * 1024 * 1024;
 export const RECAP_TTL_DAYS = 30;
+export const RECAP_TTL_DAYS_PRO = 90;
 
 export function estimateProcessingSeconds(totalBytes: number, fileCount: number) {
   const mb = totalBytes / (1024 * 1024);
@@ -107,7 +130,8 @@ export function estimateProcessingSeconds(totalBytes: number, fileCount: number)
 export function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes < 1024 * 1024 * 1024)
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 

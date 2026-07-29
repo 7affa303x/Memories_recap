@@ -105,6 +105,10 @@ export default async function BillingPage({
               {summary.dailyLoginGrantedToday ? " · credited today" : ""}.
             </p>
           ) : null}
+          <p className="mt-2 text-sm text-neutral-500">
+            Pack credits expire in 90 days. Pro monthly grants last 365 days so
+            unused balance can roll into the next months honestly.
+          </p>
         </div>
 
         <div className="rounded-[16px] bg-neutral-50 p-5 shadow-sm">

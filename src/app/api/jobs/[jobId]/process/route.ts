@@ -72,6 +72,7 @@ export async function POST(request: Request, { params }: Params) {
     trackId?: string | null;
     mood?: "joyful" | "nostalgic" | "chill" | "epic" | null;
     outputQuality?: "fhd" | "uhd" | null;
+    folder?: string | null;
   } = {};
   try {
     body = (await request.json()) as typeof body;
@@ -85,7 +86,9 @@ export async function POST(request: Request, { params }: Params) {
       trackId: body.trackId ?? null,
       mood: body.mood || "joyful",
       outputQuality: body.outputQuality === "uhd" ? "uhd" : "fhd",
+      folder: body.folder || null,
     },
+    folder: body.folder || null,
   });
 
   const amount = creditsForBytes(job.total_bytes || 0);

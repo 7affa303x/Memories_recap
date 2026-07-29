@@ -19,13 +19,24 @@ export async function POST(request: Request, { params }: Params) {
   const body = (await request.json().catch(() => ({}))) as {
     expiresInDays?: number;
     password?: string;
+    audience?: "public" | "family";
   };
 
+  const audience =
+    body.audience === "family" || body.audience === "public"
+      ? body.audience
+      : "public";
+
+  // Family links default to a shorter window and encourage a password
+  const expiresInDays =
+    body.expiresInDays ?? (audience === "family" ? 30 : 14);
+
   const { token, expiresAt } = await ensureShareLink(jobId, session.user.id, {
-    expiresInDays: body.expiresInDays ?? 14,
+    expiresInDays,
     password: body.password || null,
+    audience,
   });
 
   const url = `${getAppUrl()}/s/${token}`;
-  return NextResponse.json({ url, token, expiresAt });
+  return NextResponse.json({ url, token, expiresAt, audience });
 }

@@ -25,6 +25,9 @@ export function AppHeader({
         <Link href="/billing" className={linkClass("billing")}>
           Credits
         </Link>
+        <Link href="/support" className="min-h-11 px-2 text-sm text-neutral-500">
+          Help
+        </Link>
         <form action={signOutAction}>
           <button type="submit" className="min-h-11 px-2 text-sm text-neutral-500">
             Out

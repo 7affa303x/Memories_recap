@@ -449,7 +449,8 @@ export async function processJob(jobId: string, userId: string) {
     });
 
     const verticalBody = join(workDir, "vertical-body.mp4");
-    const verticalBase = `scale=${vw}:${vh}:force_original_aspect_ratio=increase,crop=${vw}:${vh}`;
+    // Face-biased vertical crop: prefer upper third (people usually higher in frame)
+    const verticalBase = `scale=${vw}:${vh}:force_original_aspect_ratio=increase,crop=${vw}:${vh}:(iw-ow)/2:(ih-oh)*0.22`;
     if (isPro) {
       await run(bin, [
         "-y",
@@ -530,37 +531,129 @@ export async function processJob(jobId: string, userId: string) {
     });
 
     const supabase = getServiceSupabase();
-    const landscapePath = `outputs/${userId}/${jobId}/landscape.mp4`;
-    const verticalPath = `outputs/${userId}/${jobId}/vertical.mp4`;
+    const generation = (job?.recap_generation || 0) + 1;
+    const landscapePath = `outputs/${userId}/${jobId}/v${generation}/landscape.mp4`;
+    const verticalPath = `outputs/${userId}/${jobId}/v${generation}/vertical.mp4`;
+    const highlightsPath = `outputs/${userId}/${jobId}/v${generation}/highlights.mp4`;
+    const storyPath = `outputs/${userId}/${jobId}/v${generation}/story.mp4`;
+    const tiktokPath = `outputs/${userId}/${jobId}/v${generation}/tiktok.mp4`;
+
+    // Platform-oriented vertical copies (safe margins for Stories / TikTok)
+    const storyLocal = join(workDir, "story.mp4");
+    const tiktokLocal = join(workDir, "tiktok.mp4");
+    await run(bin, [
+      "-y",
+      "-i",
+      verticalLocal,
+      "-vf",
+      "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,format=yuv420p",
+      "-c:v",
+      "libx264",
+      "-preset",
+      "veryfast",
+      "-crf",
+      "23",
+      "-c:a",
+      "aac",
+      "-movflags",
+      "+faststart",
+      storyLocal,
+    ]);
+    await run(bin, [
+      "-y",
+      "-i",
+      verticalLocal,
+      "-vf",
+      "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,format=yuv420p",
+      "-c:v",
+      "libx264",
+      "-preset",
+      "veryfast",
+      "-crf",
+      "22",
+      "-c:a",
+      "aac",
+      "-movflags",
+      "+faststart",
+      tiktokLocal,
+    ]);
+
+    // Pro highlights: shorter cut of strongest moments (first ~40% of timeline)
+    let highlightsLocal: string | null = null;
+    if (isPro) {
+      highlightsLocal = join(workDir, "highlights.mp4");
+      const fullDur = await probeDuration(bin, landscapeLocal);
+      const highlightDur = Math.max(6, Math.min(24, fullDur * 0.4));
+      await run(bin, [
+        "-y",
+        "-i",
+        landscapeLocal,
+        "-t",
+        highlightDur.toFixed(2),
+        "-c",
+        "copy",
+        highlightsLocal,
+      ]).catch(async () => {
+        await run(bin, [
+          "-y",
+          "-i",
+          landscapeLocal,
+          "-t",
+          highlightDur.toFixed(2),
+          "-c:v",
+          "libx264",
+          "-preset",
+          "veryfast",
+          "-crf",
+          "23",
+          "-c:a",
+          "aac",
+          highlightsLocal!,
+        ]);
+      });
+    }
+
     const landscapeBytes = await readFile(landscapeLocal);
     const verticalBytes = await readFile(verticalLocal);
+    const storyBytes = await readFile(storyLocal);
+    const tiktokBytes = await readFile(tiktokLocal);
 
-    const upLandscape = await supabase.storage
-      .from("memories")
-      .upload(landscapePath, landscapeBytes, {
+    const uploadsOut: Array<[string, Buffer]> = [
+      [landscapePath, landscapeBytes],
+      [verticalPath, verticalBytes],
+      [storyPath, storyBytes],
+      [tiktokPath, tiktokBytes],
+    ];
+    if (highlightsLocal) {
+      uploadsOut.push([highlightsPath, await readFile(highlightsLocal)]);
+    }
+    for (const [path, bytes] of uploadsOut) {
+      const up = await supabase.storage.from("memories").upload(path, bytes, {
         contentType: "video/mp4",
         upsert: true,
       });
-    if (upLandscape.error) throw new Error(upLandscape.error.message);
-
-    const upVertical = await supabase.storage
-      .from("memories")
-      .upload(verticalPath, verticalBytes, {
-        contentType: "video/mp4",
-        upsert: true,
-      });
-    if (upVertical.error) throw new Error(upVertical.error.message);
+      if (up.error) throw new Error(up.error.message);
+    }
 
     const duration = await probeDuration(bin, landscapeLocal);
+    const { RECAP_TTL_DAYS, RECAP_TTL_DAYS_PRO } = await import("@/lib/types");
     await upsertRecap({
       jobId,
       userId,
       landscapePath,
       verticalPath,
+      highlightsPath: highlightsLocal ? highlightsPath : null,
+      storyPath,
+      tiktokPath,
       durationSeconds: duration,
+      mood: mood.id,
+      ttlDays: isPro ? RECAP_TTL_DAYS_PRO : RECAP_TTL_DAYS,
+      generation,
     });
 
-    await ensureShareLink(jobId, userId, { expiresInDays: 14 });
+    await ensureShareLink(jobId, userId, {
+      expiresInDays: isPro ? 90 : 14,
+    });
 
     await updateJob(jobId, userId, {
       status: "completed",
@@ -569,6 +662,8 @@ export async function processJob(jobId: string, userId: string) {
       eta_seconds: 0,
       completed_at: new Date().toISOString(),
       error: null,
+      recap_generation: generation,
+      folder: options.folder || job?.folder || null,
     });
 
     await dequeueJob(jobId).catch(() => undefined);

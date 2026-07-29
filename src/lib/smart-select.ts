@@ -3,6 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { hasVisionProvider, scoreMemoryFrame, type VisionTier } from "@/lib/ai-vision";
 import { clipLengthRange, getMood, type MoodId } from "@/lib/mood";
+import { applyBeatSync, applyNarrativeArc } from "@/lib/story-edit";
 import { logInfo } from "@/lib/logger";
 
 function runCapture(bin: string, args: string[]) {
@@ -259,7 +260,9 @@ export async function selectBestClips(input: {
     });
   }
 
-  return final;
+  // Narrative + beat-aware finishing
+  const moodProfile = getMood(input.mood);
+  return applyBeatSync(applyNarrativeArc(final), moodProfile);
 }
 
 export async function writeConcatList(path: string, files: string[]) {

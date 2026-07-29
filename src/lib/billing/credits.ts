@@ -199,13 +199,15 @@ function addLot(
     creemEventId?: string | null;
   }
 ) {
+  const expiryDays =
+    input.source === "subscription" ? 365 : CREDIT_EXPIRY_DAYS;
   const lot: CreditLot = {
     id: randomUUID(),
     source: input.source,
     originalAmount: input.amount,
     remainingAmount: input.amount,
     expiresAt: new Date(
-      Date.now() + CREDIT_EXPIRY_DAYS * 24 * 60 * 60 * 1000
+      Date.now() + expiryDays * 24 * 60 * 60 * 1000
     ).toISOString(),
     creemEventId: input.creemEventId ?? null,
     createdAt: new Date().toISOString(),

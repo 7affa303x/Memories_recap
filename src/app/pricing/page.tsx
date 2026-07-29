@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { getOptionalUser } from "@/lib/session";
 import { Logo } from "@/components/logo";
 import { BuyButton } from "@/components/buy-button";
+import { Button } from "@/components/ui/button";
 import {
   FREE_CREDITS,
   PRODUCT_CREDITS,
@@ -34,8 +35,8 @@ export default async function PricingPage() {
         <div>
           <h1 className="text-2xl font-medium tracking-tight">Pricing</h1>
           <p className="mt-2 text-neutral-500">
-            Clear prices. Credits expire after 90 days. System failures restore
-            credits.
+            Clear prices. Pack credits expire after 90 days. Pro monthly credits
+            last 365 days so unused balance can carry across months.
           </p>
         </div>
 
@@ -54,17 +55,35 @@ export default async function PricingPage() {
             <p className="mt-2 text-3xl font-medium">${PRODUCT_USD.subscription}</p>
             <p className="mt-1 text-sm text-neutral-500">
               {PRODUCT_CREDITS.subscription} credits / month · stronger AI · 4K
-              output · no overlay watermark · end card kept · cancel anytime
+              output · highlights · 90-day archive · no overlay watermark · end
+              card kept · cancel anytime
             </p>
           </div>
           {user ? (
-            <BuyButton product="subscription" label="Subscribe" />
+            <BuyButton product="subscription" label="Subscribe monthly" />
           ) : (
             <GoogleSignInButton
               callbackUrl="/pricing"
               label="Sign in to subscribe"
             />
           )}
+        </div>
+
+        <div className="space-y-4 rounded-[16px] bg-neutral-50 p-5 shadow-sm">
+          <div>
+            <p className="text-sm text-neutral-500">Pro Annual</p>
+            <p className="mt-2 text-3xl font-medium">$170</p>
+            <p className="mt-1 text-sm text-neutral-500">
+              Same Pro benefits · ~2 months free vs monthly · honest discount for
+              people who stay. Email support to enable checkout while we wire the
+              Creem annual product.
+            </p>
+          </div>
+          <Button asChild variant="secondary" className="h-12 w-full rounded-[16px]">
+            <a href="mailto:haffa303@gmail.com?subject=Memories%20Recap%20annual%20Pro">
+              Request annual Pro
+            </a>
+          </Button>
         </div>
 
         <div className="space-y-4">
@@ -104,6 +123,13 @@ export default async function PricingPage() {
           <p>1 credit ≈ 1 MB processed (minimum 10 per job).</p>
           <p>If processing fails on our side, credits are restored.</p>
           <p>Manage cards and cancellations in the billing portal.</p>
+          <p>
+            Need a hand?{" "}
+            <Link href="/support" className="text-green-700 underline">
+              Human support
+            </Link>
+            .
+          </p>
         </div>
       </section>
     </main>
