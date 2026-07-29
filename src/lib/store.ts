@@ -235,8 +235,17 @@ export async function deleteUpload(
 ) {
   const upload = await getUpload(jobIdValue, userId, uploadId);
   if (upload?.storage_path) {
-    const supabase = getServiceSupabase();
-    await supabase.storage.from("memories").remove([upload.storage_path]);
+    if (upload.storage_path.startsWith("blob:")) {
+      try {
+        const { del } = await import("@vercel/blob");
+        await del(upload.storage_path.replace(/^blob:/, ""));
+      } catch {
+        // best-effort
+      }
+    } else {
+      const supabase = getServiceSupabase();
+      await supabase.storage.from("memories").remove([upload.storage_path]);
+    }
   }
   await removePath(`uploads/${userId}/${jobIdValue}/${uploadId}.json`);
 }

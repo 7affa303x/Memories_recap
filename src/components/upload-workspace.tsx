@@ -45,6 +45,7 @@ async function uploadWithProgress(
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", signedUrl);
     xhr.setRequestHeader("Content-Type", contentType || "video/mp4");
+    xhr.setRequestHeader("x-upsert", "true");
     xhr.timeout = 30 * 60 * 1000;
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable) {
@@ -59,6 +60,20 @@ async function uploadWithProgress(
         onProgress(100);
         resolve();
       } else {
+        const body = (xhr.responseText || "").toLowerCase();
+        if (
+          xhr.status === 413 ||
+          body.includes("maximum allowed size") ||
+          body.includes("entitytoo large") ||
+          body.includes("payload too large")
+        ) {
+          reject(
+            new Error(
+              "This clip is larger than the small-file storage lane (~50 MB). We’ll retry on the large-file lane — tap Create again."
+            )
+          );
+          return;
+        }
         reject(
           new Error(
             `Upload paused at the network (${xhr.status}). Keep this tab open and try again — large clips sometimes need a second pass.`
@@ -80,6 +95,28 @@ async function uploadWithProgress(
       );
     xhr.send(file);
   });
+}
+
+async function uploadViaBlob(
+  file: File,
+  pathname: string,
+  jobId: string,
+  userIdHint: string,
+  contentType: string,
+  onProgress: (pct: number) => void
+) {
+  const { upload } = await import("@vercel/blob/client");
+  await upload(pathname, file, {
+    access: "private",
+    handleUploadUrl: "/api/blob/upload",
+    multipart: true,
+    contentType: contentType || "video/mp4",
+    clientPayload: JSON.stringify({ userId: userIdHint, jobId }),
+    onUploadProgress: ({ percentage }) => {
+      onProgress(Math.max(1, Math.min(99, Math.round(percentage))));
+    },
+  });
+  onProgress(100);
 }
 
 type MusicTrackOption = {
@@ -328,6 +365,7 @@ export function UploadWorkspace({
         }
 
         const jobId = createJson.job.id as string;
+        const userId = createJson.job.user_id as string;
 
         for (const [index, item] of files.entries()) {
           setFiles((current) =>
@@ -338,13 +376,14 @@ export function UploadWorkspace({
             )
           );
 
+          const mime = item.file.type || "video/mp4";
           const metaRes = await fetch(`/api/jobs/${jobId}/uploads`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               fileName: item.file.name,
               size: item.file.size,
-              type: item.file.type || "video/mp4",
+              type: mime,
               sortOrder: index,
               resumeUploadId: item.uploadId,
             }),
@@ -357,19 +396,30 @@ export function UploadWorkspace({
             );
           }
 
-          setFiles((current) =>
-            current.map((entry) =>
-              entry.id === item.id
-                ? { ...entry, uploadId: metaJson.upload?.id }
-                : entry
-            )
-          );
+          if (metaJson.alreadyUploaded) {
+            setFiles((current) =>
+              current.map((entry) =>
+                entry.id === item.id
+                  ? {
+                      ...entry,
+                      uploadId: metaJson.upload?.id,
+                      progress: 100,
+                      status: "done",
+                    }
+                  : entry
+              )
+            );
+            continue;
+          }
 
-          if (!metaJson.alreadyUploaded) {
-            await uploadWithProgress(
+          if (metaJson.provider === "blob") {
+            const pathname = metaJson.blobPathname as string;
+            await uploadViaBlob(
               item.file,
-              metaJson.signedUrl,
-              item.file.type || "video/mp4",
+              pathname,
+              jobId,
+              userId,
+              mime,
               (pct) => {
                 setFiles((current) =>
                   current.map((entry) =>
@@ -380,7 +430,60 @@ export function UploadWorkspace({
                 );
               }
             );
+            const finalizeRes = await fetch(`/api/jobs/${jobId}/uploads`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                fileName: item.file.name,
+                size: item.file.size,
+                type: mime,
+                sortOrder: index,
+                blobPathname: pathname,
+              }),
+            });
+            const finalizeJson = await finalizeRes.json();
+            if (!finalizeRes.ok) {
+              throw new Error(
+                finalizeJson.error || "Couldn’t finalize large upload"
+              );
+            }
+            setFiles((current) =>
+              current.map((entry) =>
+                entry.id === item.id
+                  ? {
+                      ...entry,
+                      uploadId: finalizeJson.upload?.id,
+                      progress: 100,
+                      status: "done",
+                    }
+                  : entry
+              )
+            );
+            continue;
           }
+
+          setFiles((current) =>
+            current.map((entry) =>
+              entry.id === item.id
+                ? { ...entry, uploadId: metaJson.upload?.id }
+                : entry
+            )
+          );
+
+          await uploadWithProgress(
+            item.file,
+            metaJson.signedUrl,
+            mime,
+            (pct) => {
+              setFiles((current) =>
+                current.map((entry) =>
+                  entry.id === item.id
+                    ? { ...entry, progress: pct, status: "uploading" }
+                    : entry
+                )
+              );
+            }
+          );
 
           setFiles((current) =>
             current.map((entry) =>

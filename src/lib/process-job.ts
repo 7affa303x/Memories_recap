@@ -7,6 +7,7 @@ import { pipeline } from "node:stream/promises";
 import { spawn } from "node:child_process";
 import ffmpegPath from "ffmpeg-static";
 import { getServiceSupabase, signedRecapUrl } from "@/lib/supabase/admin";
+import { downloadSourceToFile } from "@/lib/source-download";
 import {
   appendJobLog,
   dequeueJob,
@@ -56,10 +57,7 @@ function run(bin: string, args: string[]) {
 }
 
 async function downloadToFile(path: string, dest: string) {
-  const supabase = getServiceSupabase();
-  const { data, error } = await supabase.storage.from("memories").download(path);
-  if (error || !data) throw new Error(error?.message || "Download failed");
-  await pipeline(Readable.fromWeb(data.stream() as never), createWriteStream(dest));
+  await downloadSourceToFile(path, dest);
 }
 
 async function fileExists(path: string) {

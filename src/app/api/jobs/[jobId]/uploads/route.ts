@@ -13,7 +13,9 @@ import {
   inferVideoMime,
   isLikelyVideoFile,
   MAX_FILE_BYTES,
+  usesBlobUpload,
 } from "@/lib/media";
+import { toBlobStoragePath } from "@/lib/source-download";
 
 type Params = { params: Promise<{ jobId: string }> };
 
@@ -35,11 +37,15 @@ export async function POST(request: Request, { params }: Params) {
     type: string;
     sortOrder?: number;
     resumeUploadId?: string;
+    blobPathname?: string;
   };
 
   if (!body.fileName || !body.size) {
     return NextResponse.json(
-      { error: "That file didn’t come through cleanly. Try choosing it again from your gallery." },
+      {
+        error:
+          "That file didn’t come through cleanly. Try choosing it again from your gallery.",
+      },
       { status: 400 }
     );
   }
@@ -59,22 +65,59 @@ export async function POST(request: Request, { params }: Params) {
     );
   }
   const mimeType = inferVideoMime(body.fileName, body.type);
+  const preferBlob = usesBlobUpload(body.size);
+
+  if (body.blobPathname) {
+    if (!body.blobPathname.startsWith(`uploads/${session.user.id}/${jobId}/`)) {
+      return NextResponse.json({ error: "Invalid blob path" }, { status: 400 });
+    }
+    const upload = await createUpload({
+      jobId,
+      userId: session.user.id,
+      storagePath: toBlobStoragePath(body.blobPathname),
+      fileName: body.fileName,
+      mimeType,
+      sizeBytes: body.size,
+      sortOrder: body.sortOrder ?? 0,
+    });
+    return NextResponse.json({
+      upload,
+      provider: "blob",
+      alreadyUploaded: true,
+      signedUrl: null,
+    });
+  }
 
   const supabase = getServiceSupabase();
 
-  // Resume: if prior upload exists and object is present, skip re-upload
   if (body.resumeUploadId) {
-    const existing = await getUpload(jobId, session.user.id, body.resumeUploadId);
+    const existing = await getUpload(
+      jobId,
+      session.user.id,
+      body.resumeUploadId
+    );
     if (existing) {
+      if (existing.storage_path.startsWith("blob:")) {
+        return NextResponse.json({
+          upload: existing,
+          alreadyUploaded: true,
+          provider: "blob",
+          signedUrl: null,
+        });
+      }
       const { data } = await supabase.storage
         .from("memories")
         .list(`${session.user.id}/${jobId}`, { limit: 100 });
       const name = existing.storage_path.split("/").pop();
-      const found = (data || []).some((item) => item.name === name && (item.metadata?.size || 0) >= body.size * 0.98);
+      const found = (data || []).some(
+        (item) =>
+          item.name === name && (item.metadata?.size || 0) >= body.size * 0.98
+      );
       if (found) {
         return NextResponse.json({
           upload: existing,
           alreadyUploaded: true,
+          provider: "supabase",
           signedUrl: null,
         });
       }
@@ -82,6 +125,28 @@ export async function POST(request: Request, { params }: Params) {
   }
 
   const safeName = body.fileName.replace(/[^\w.\-()+ ]/g, "_");
+
+  if (preferBlob) {
+    if (!process.env.BLOB_READ_WRITE_TOKEN) {
+      return NextResponse.json(
+        {
+          error:
+            "Large video storage isn’t ready yet. Please try a smaller clip (~under 45 MB) or try again shortly.",
+        },
+        { status: 503 }
+      );
+    }
+    const blobPathname = `uploads/${session.user.id}/${jobId}/${nanoid(10)}-${safeName}`;
+    return NextResponse.json({
+      provider: "blob",
+      blobPathname,
+      alreadyUploaded: false,
+      signedUrl: null,
+      upload: null,
+      mimeType,
+    });
+  }
+
   const storagePath = `${session.user.id}/${jobId}/${nanoid(10)}-${safeName}`;
 
   const { data: signed, error: signError } = await supabase.storage
@@ -107,6 +172,7 @@ export async function POST(request: Request, { params }: Params) {
 
   return NextResponse.json({
     upload,
+    provider: "supabase",
     signedUrl: signed.signedUrl,
     token: signed.token,
     path: signed.path,

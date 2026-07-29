@@ -45,3 +45,4 @@ next-env.d.ts
 .env.secrets.json
 scripts/gumroad-env.generated.txt
 scripts/*-env.generated.txt
+.env*

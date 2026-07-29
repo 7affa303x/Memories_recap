@@ -104,12 +104,7 @@ async function main() {
   ];
 
   for (const item of CATALOG) {
-    let product = existing.find(
-      (p) =>
-        p.custom_permalink === item.permalink ||
-        (p.short_url || "").includes(item.permalink) ||
-        p.name === item.name
-    );
+    let product = existing.find((p) => p.custom_permalink === item.permalink);
 
     if (!product) {
       console.log(`Creating ${item.key}…`);

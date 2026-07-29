@@ -7,6 +7,16 @@ export const MAX_FILES_PER_JOB = 12;
 export const MAX_FILE_BYTES = 1536 * 1024 * 1024; // 1.5 GB
 export const MAX_BYTES_PER_JOB = 3 * 1024 * 1024 * 1024; // 3 GB
 
+/**
+ * Supabase Free plan global storage limit is 50 MB.
+ * Files at or above this use Vercel Blob instead.
+ */
+export const SUPABASE_DIRECT_MAX_BYTES = 45 * 1024 * 1024;
+
+export function usesBlobUpload(sizeBytes: number) {
+  return sizeBytes >= SUPABASE_DIRECT_MAX_BYTES;
+}
+
 export function isLikelyVideoFile(name: string, type?: string | null) {
   if (type?.startsWith("video/")) return true;
   if (type === "application/octet-stream" && VIDEO_EXT.test(name)) return true;
