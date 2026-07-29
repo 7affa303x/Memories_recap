@@ -74,5 +74,23 @@ export async function POST(request: Request, { params }: Params) {
   });
 
   const url = `${getAppUrl()}/s/${token}`;
-  return NextResponse.json({ url, token, expiresAt, audience });
+
+  let momentsGranted = 0;
+  if (audience === "family" && session.user.email) {
+    const { grantFamilyShareReward } = await import("@/lib/rewards/grants");
+    const granted = await grantFamilyShareReward(
+      session.user.id,
+      session.user.email,
+      jobId
+    ).catch(() => null);
+    if (granted?.ok) momentsGranted = granted.amount;
+  }
+
+  return NextResponse.json({
+    url,
+    token,
+    expiresAt,
+    audience,
+    momentsGranted,
+  });
 }

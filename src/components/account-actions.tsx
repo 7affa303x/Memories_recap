@@ -74,7 +74,14 @@ export function AccountActions({
           variant="secondary"
           className="h-12 rounded-[16px] bg-white text-base shadow-sm"
         >
-          <a href="/billing">Billing & credits</a>
+          <a href="/moments">Moments & rewards</a>
+        </Button>
+        <Button
+          asChild
+          variant="secondary"
+          className="h-12 rounded-[16px] bg-white text-base shadow-sm"
+        >
+          <a href="/billing">Billing history</a>
         </Button>
       </div>
 

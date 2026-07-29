@@ -180,7 +180,7 @@ export function UploadWorkspace({
       .then((j) => {
         if (typeof j.balance === "number") setBalance(j.balance);
         if (j.dailyLoginGrantedToday && j.dailyLoginAmount) {
-          setDailyNote(`+${j.dailyLoginAmount} daily credits ready for you`);
+          setDailyNote(`+${j.dailyLoginAmount} Moments ready for you`);
         }
         const status = j.subscription?.status as string | undefined;
         setIsPro(status === "active" || status === "trialing");
@@ -613,13 +613,17 @@ export function UploadWorkspace({
 
       <div className="rounded-[16px] bg-neutral-50 p-4 text-sm shadow-sm">
         <div className="flex items-center justify-between gap-3">
-          <span className="text-neutral-500">Your credits</span>
+          <span className="text-neutral-500">Your Moments</span>
           <span className="font-medium">{balance}</span>
         </div>
         <p className="mt-2 text-neutral-500">
-          1 credit ≈ 1 MB processed (min 10).{" "}
-          <Link href="/pricing" className="text-green-700 underline">
-            Buy credits
+          1 Moment ≈ 1 MB processed (min 10).{" "}
+          <Link href="/moments" className="text-green-700 underline">
+            Earn more
+          </Link>
+          {" · "}
+          <Link href="/pricing" className="text-neutral-500 underline">
+            Quiet packs
           </Link>
         </p>
         {dailyNote ? (
@@ -981,11 +985,11 @@ export function UploadWorkspace({
                 onChange={(e) => setHideEndCard(e.target.checked)}
                 className="size-4 rounded border-neutral-300"
               />
-              Hide end card (Pro)
+              Hide end card
             </label>
           ) : (
             <p className="mt-2 text-xs text-neutral-500">
-              Pro can hide the branded end card.
+              Cleaner endings unlock with quieter upgrades later — no rush.
             </p>
           )}
         </div>
@@ -997,23 +1001,21 @@ export function UploadWorkspace({
         </h2>
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
-        {!isPro && completedRecaps >= 3 ? (
-          <p className="rounded-[16px] bg-amber-50 px-3 py-2 text-sm text-amber-900">
-            You&apos;ve made {completedRecaps} recaps —{" "}
-            <Link href="/pricing" className="font-medium underline">
-              unlock Pro
-            </Link>{" "}
-            for 4K, no watermark, and cleaner exports.
-          </p>
-        ) : null}
-
         {underfunded ? (
-          <Button
-            asChild
-            className="h-12 w-full rounded-[16px] text-base"
-          >
-            <Link href="/pricing">Buy credits to continue</Link>
-          </Button>
+          <div className="space-y-2">
+            <p className="rounded-[16px] bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              Need a few more Moments — invite a friend, visit tomorrow, or top
+              up quietly.
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <Button asChild variant="secondary" className="h-12 rounded-[16px]">
+                <Link href="/moments">Earn Moments</Link>
+              </Button>
+              <Button asChild className="h-12 rounded-[16px] text-base">
+                <Link href="/pricing">Top up</Link>
+              </Button>
+            </div>
+          </div>
         ) : (
           <Button
             type="button"
@@ -1023,7 +1025,7 @@ export function UploadWorkspace({
           >
             {isPending
               ? "Uploading with care…"
-              : `Create recap · ${totals.creditsRequired} credits`}
+              : `Create recap · ${totals.creditsRequired} Moments`}
           </Button>
         )}
       </section>
