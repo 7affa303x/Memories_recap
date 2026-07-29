@@ -71,9 +71,16 @@ export default async function LandingPage({
             </p>
           ) : null}
 
-          <div className="mt-10">
+          <div className="mt-10 space-y-3">
+            <Button asChild className="h-12 w-full rounded-[16px] text-base">
+              <a href="/journey">Enter cinematic journey</a>
+            </Button>
             {user ? (
-              <Button asChild className="h-12 w-full rounded-[16px] text-base">
+              <Button
+                asChild
+                variant="outline"
+                className="h-12 w-full rounded-[16px] text-base"
+              >
                 <a href="/upload">Upload memories</a>
               </Button>
             ) : (
