@@ -109,11 +109,14 @@ export default function TermsPage() {
         <section className="space-y-2">
           <h2 className="text-lg font-medium text-neutral-900">Refunds</h2>
           <p>
-            Digital goods (credit packs and subscriptions) follow the refund
-            policy of the payment provider configured as merchant of record
-            (Gumroad and/or Creem). If a job fails because of a system error on
-            our side, reserved credits are restored automatically — that is the
-            primary remedy for failed processing.
+            Digital goods (Moments packs and subscriptions) follow our{" "}
+            <Link href="/refund" className="text-green-700 underline">
+              Refund Policy
+            </Link>{" "}
+            and the rules of the payment provider configured as merchant of
+            record. If a job fails because of a system error on our side,
+            reserved Moments are restored automatically — that is the primary
+            remedy for failed processing.
           </p>
         </section>
 
