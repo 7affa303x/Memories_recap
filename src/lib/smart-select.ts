@@ -1,7 +1,8 @@
 import { spawn } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { hasVisionProvider, scoreMemoryFrame } from "@/lib/ai-vision";
+import { hasVisionProvider, scoreMemoryFrame, type VisionTier } from "@/lib/ai-vision";
+import { clipLengthRange, getMood, type MoodId } from "@/lib/mood";
 import { logInfo } from "@/lib/logger";
 
 function runCapture(bin: string, args: string[]) {
@@ -54,8 +55,6 @@ async function extractFrame(
 }
 
 function scoreJpegBuffer(buf: Buffer) {
-  // Lightweight brightness/contrast proxy from JPEG bytes (not full decode).
-  // Good enough to reject near-black / flat frames without heavy deps.
   let sum = 0;
   let sumSq = 0;
   const step = Math.max(1, Math.floor(buf.length / 4000));
@@ -70,7 +69,6 @@ function scoreJpegBuffer(buf: Buffer) {
   const mean = sum / n;
   const variance = Math.max(0, sumSq / n - mean * mean);
   const contrast = Math.sqrt(variance);
-  // Prefer mid brightness + some contrast (faces/scenes usually sit here)
   const brightnessScore =
     mean < 18 ? 0 : mean > 235 ? 0.15 : 1 - Math.abs(mean - 128) / 128;
   const contrastScore = Math.min(1, contrast / 45);
@@ -96,7 +94,6 @@ async function detectSceneTimes(bin: string, file: string, duration: number) {
     const t = Number(match[1]);
     if (t > 0.4 && t < duration - 0.4) times.add(Number(t.toFixed(2)));
   }
-  // Always include chronological grid samples for coverage/diversity
   const step = Math.max(2, duration / 12);
   for (let t = step; t < duration - 1; t += step) {
     times.add(Number(t.toFixed(2)));
@@ -112,22 +109,24 @@ export type SelectedClip = {
 };
 
 /**
- * Smart clip selection: scene changes + brightness/contrast scoring.
- * Keeps chronological order, spreads diversity, avoids black/flat frames.
- * Optional vision boost via Gemini → Groq → OpenAI when keys are set.
+ * Efficiency-based selection:
+ * - Low-variety / dull stretches → keep only seconds
+ * - Many strong, diverse moments → keep more (no fixed 48s cap)
  */
 export async function selectBestClips(input: {
   bin: string;
   workDir: string;
   files: Array<{ path: string; duration: number }>;
-  targetSeconds?: number;
+  mood?: MoodId | null;
+  visionTier?: VisionTier;
+  /** Soft max only — not a hard target fill */
+  maxSeconds?: number;
 }): Promise<SelectedClip[]> {
-  const target = input.targetSeconds ?? 48;
-  const perSourceBudget = Math.max(
-    1,
-    Math.ceil(target / Math.max(1, input.files.length))
-  );
+  const mood = getMood(input.mood);
+  const { min: minLen, max: maxLen } = clipLengthRange(mood);
+  const softMax = input.maxSeconds ?? 180;
   const selected: SelectedClip[] = [];
+  const visionTier = input.visionTier ?? "free";
 
   for (const [fileIndex, file] of input.files.entries()) {
     const candidates = await detectSceneTimes(
@@ -138,27 +137,22 @@ export async function selectBestClips(input: {
     const scored: Array<{ start: number; score: number }> = [];
 
     for (const [i, at] of candidates.entries()) {
-      const framePath = join(
-        input.workDir,
-        `frame-${fileIndex}-${i}.jpg`
-      );
+      const framePath = join(input.workDir, `frame-${fileIndex}-${i}.jpg`);
       try {
         await extractFrame(input.bin, file.path, at, framePath);
         const buf = await readFile(framePath);
         const { score } = scoreJpegBuffer(buf);
-        // Mild preference for earlier chronological moments within a source
-        const chronoBias = 1 - (i / Math.max(1, candidates.length)) * 0.08;
+        const chronoBias = 1 - (i / Math.max(1, candidates.length)) * 0.05;
         scored.push({ start: at, score: score * chronoBias });
       } catch {
-        // skip bad frames
+        // skip
       }
     }
 
     scored.sort((a, b) => b.score - a.score);
 
-    // Vision AI: re-score top local candidates before picking
     if (hasVisionProvider()) {
-      const top = scored.slice(0, Math.min(8, scored.length));
+      const top = scored.slice(0, Math.min(10, scored.length));
       for (const [i, candidate] of top.entries()) {
         const framePath = join(
           input.workDir,
@@ -166,30 +160,42 @@ export async function selectBestClips(input: {
         );
         try {
           await extractFrame(input.bin, file.path, candidate.start, framePath);
-          const vision = await scoreMemoryFrame(framePath);
-          if (vision) candidate.score += vision.score * 1.15;
+          const vision = await scoreMemoryFrame(framePath, visionTier);
+          if (vision) candidate.score += vision.score * 1.2;
         } catch {
-          // keep local score
+          // keep local
         }
       }
       scored.sort((a, b) => b.score - a.score);
       logInfo("vision_candidates_scored", {
         fileIndex,
         count: top.length,
+        tier: visionTier,
       });
     }
 
-    const clipLen = Math.min(
-      7,
-      Math.max(2.5, perSourceBudget / Math.max(1, Math.min(3, scored.length)))
-    );
+    const strong = scored.filter((s) => s.score >= 0.42);
+    const medium = scored.filter((s) => s.score >= 0.28 && s.score < 0.42);
+    // Efficiency: dull source → few clips; rich source → many
+    const maxPicks =
+      strong.length >= 5
+        ? Math.min(8, strong.length)
+        : strong.length >= 2
+          ? Math.min(4, Math.max(2, strong.length + 1))
+          : medium.length >= 2
+            ? 2
+            : 1;
+
+    const clipLen =
+      strong.length >= 4
+        ? Math.min(maxLen, Math.max(minLen, (minLen + maxLen) / 2))
+        : Math.min(maxLen, Math.max(minLen + 0.5, maxLen * 0.7));
+
     const picked: number[] = [];
-    for (const candidate of scored) {
-      if (picked.length >= Math.min(3, Math.max(1, Math.ceil(perSourceBudget / clipLen)))) {
-        break;
-      }
-      // Diversity: avoid overlapping windows
-      if (picked.some((t) => Math.abs(t - candidate.start) < clipLen * 0.85)) {
+    const pool = strong.length > 0 ? [...strong, ...medium] : scored;
+    for (const candidate of pool) {
+      if (picked.length >= maxPicks) break;
+      if (picked.some((t) => Math.abs(t - candidate.start) < clipLen * 0.8)) {
         continue;
       }
       if (candidate.score < 0.18) continue;
@@ -197,25 +203,29 @@ export async function selectBestClips(input: {
     }
 
     if (picked.length === 0) {
-      const fallbackStart = Math.max(0, file.duration / 2 - clipLen / 2);
-      picked.push(fallbackStart);
+      picked.push(Math.max(0, file.duration / 2 - clipLen / 2));
     }
 
     picked
       .sort((a, b) => a - b)
       .forEach((start) => {
         const match = scored.find((s) => s.start === start);
+        const score = match?.score ?? 0.4;
+        // Dull moments get shorter duration
+        const durationScale = score >= 0.5 ? 1 : score >= 0.3 ? 0.7 : 0.45;
+        const duration = Math.min(
+          clipLen * durationScale,
+          Math.max(1.2, file.duration - start)
+        );
         selected.push({
           sourcePath: file.path,
           start,
-          duration: Math.min(clipLen, Math.max(1.5, file.duration - start)),
-          score: match?.score ?? 1,
+          duration,
+          score,
         });
       });
   }
 
-  // Trim to target length while keeping chronological order
-  // Prefer higher scores when over budget by dropping weakest within order windows later if needed.
   const ordered = selected.sort((a, b) => {
     const ai = input.files.findIndex((f) => f.path === a.sourcePath);
     const bi = input.files.findIndex((f) => f.path === b.sourcePath);
@@ -223,14 +233,21 @@ export async function selectBestClips(input: {
     return a.start - b.start;
   });
 
+  // Diversity pass: drop near-duplicate low scores when over soft max
   const final: SelectedClip[] = [];
   let used = 0;
+  const byScore = [...ordered].sort((a, b) => b.score - a.score);
+  const keepSet = new Set<SelectedClip>();
+  for (const clip of byScore) {
+    if (used >= softMax && clip.score < 0.55) continue;
+    keepSet.add(clip);
+    used += clip.duration;
+  }
+
   for (const clip of ordered) {
-    if (used >= target) break;
-    const duration = Math.min(clip.duration, target - used);
-    if (duration < 1.2) continue;
-    final.push({ ...clip, duration });
-    used += duration;
+    if (!keepSet.has(clip)) continue;
+    if (clip.duration < 1.1) continue;
+    final.push(clip);
   }
 
   if (final.length === 0 && input.files[0]) {

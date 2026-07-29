@@ -1,5 +1,5 @@
 import { createWriteStream } from "node:fs";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
@@ -11,6 +11,7 @@ import {
   appendJobLog,
   dequeueJob,
   ensureShareLink,
+  getJobForUser,
   listUploads,
   updateJob,
   upsertRecap,
@@ -20,7 +21,21 @@ import {
   selectBestClips,
   writeConcatList,
 } from "@/lib/smart-select";
+import { shouldKeepOriginalAudio } from "@/lib/audio-keep";
+import {
+  END_CARD_SECONDS,
+  endCardImagePath,
+  watermarkDrawtextFilter,
+} from "@/lib/branding-video";
+import { getMood } from "@/lib/mood";
+import {
+  resolveMusicSelection,
+  trackAbsolutePath,
+  type MusicMode,
+} from "@/lib/music";
+import { getBillingSummary } from "@/lib/billing/credits";
 import { logError, logInfo } from "@/lib/logger";
+import type { RecapOptions } from "@/lib/types";
 
 function run(bin: string, args: string[]) {
   return new Promise<void>((resolve, reject) => {
@@ -44,6 +59,51 @@ async function downloadToFile(path: string, dest: string) {
   await pipeline(Readable.fromWeb(data.stream() as never), createWriteStream(dest));
 }
 
+async function fileExists(path: string) {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function makeEndCardClip(
+  bin: string,
+  orientation: "landscape" | "vertical",
+  outPath: string
+) {
+  const image = endCardImagePath(orientation);
+  const size = orientation === "vertical" ? "1080:1920" : "1920:1080";
+  await run(bin, [
+    "-y",
+    "-loop",
+    "1",
+    "-i",
+    image,
+    "-f",
+    "lavfi",
+    "-i",
+    "anullsrc=channel_layout=stereo:sample_rate=44100",
+    "-t",
+    String(END_CARD_SECONDS),
+    "-vf",
+    `scale=${size}:force_original_aspect_ratio=decrease,pad=${size}:(ow-iw)/2:(oh-ih)/2,format=yuv420p`,
+    "-c:v",
+    "libx264",
+    "-preset",
+    "veryfast",
+    "-crf",
+    "20",
+    "-c:a",
+    "aac",
+    "-shortest",
+    "-movflags",
+    "+faststart",
+    outPath,
+  ]);
+}
+
 export async function processJob(jobId: string, userId: string) {
   const bin = ffmpegPath;
   if (!bin) throw new Error("ffmpeg binary missing");
@@ -51,6 +111,31 @@ export async function processJob(jobId: string, userId: string) {
   const started = Date.now();
   await appendJobLog(userId, jobId, "process_start");
   logInfo("process_start", { jobId, userId });
+
+  const job = await getJobForUser(jobId, userId);
+  const options: RecapOptions = job?.recap_options ?? {
+    musicMode: "auto",
+    mood: "joyful",
+    trackId: null,
+  };
+  const mood = getMood(options.mood);
+  const musicMode = (options.musicMode || "auto") as MusicMode;
+  const track = resolveMusicSelection({
+    mode: musicMode,
+    trackId: options.trackId,
+    mood: mood.id,
+  });
+
+  let isPro = false;
+  try {
+    const summary = await getBillingSummary(userId, job?.notify_email || "");
+    isPro = Boolean(
+      summary.subscription &&
+        ["active", "trialing"].includes(summary.subscription.status)
+    );
+  } catch {
+    isPro = false;
+  }
 
   const uploads = await listUploads(jobId, userId);
   if (uploads.length === 0) {
@@ -102,14 +187,36 @@ export async function processJob(jobId: string, userId: string) {
       bin,
       workDir,
       files: localFiles,
-      targetSeconds: 48,
+      mood: mood.id,
+      visionTier: isPro ? "pro" : "free",
     });
     await appendJobLog(userId, jobId, "clips_selected", {
       count: picks.length,
+      mood: mood.id,
+      musicMode,
+      trackId: track?.id ?? null,
     });
 
     for (const [index, pick] of picks.entries()) {
       const clip = join(workDir, `clip-${index}.mp4`);
+      let keepAudio = false;
+      try {
+        const audio = await shouldKeepOriginalAudio({
+          bin,
+          sourcePath: pick.sourcePath,
+          start: pick.start,
+          duration: pick.duration,
+        });
+        keepAudio = audio.keep;
+      } catch {
+        keepAudio = false;
+      }
+
+      // ~10–20% keep rate: only peak moments keep original audio
+      const audioFilter = keepAudio
+        ? ["-c:a", "aac", "-ac", "2", "-ar", "44100"]
+        : ["-an"];
+
       await run(bin, [
         "-y",
         "-ss",
@@ -119,26 +226,21 @@ export async function processJob(jobId: string, userId: string) {
         "-t",
         pick.duration.toFixed(2),
         "-vf",
-        "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,fps=30",
+        `scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,fps=30,${mood.colorFilter}`,
         "-c:v",
         "libx264",
         "-preset",
         "veryfast",
         "-crf",
         "23",
-        "-c:a",
-        "aac",
-        "-ac",
-        "2",
-        "-ar",
-        "44100",
+        ...audioFilter,
         "-movflags",
         "+faststart",
         clip,
       ]);
       clipPaths.push(clip);
       await updateJob(jobId, userId, {
-        progress: 30 + Math.round(((index + 1) / picks.length) * 25),
+        progress: 30 + Math.round(((index + 1) / picks.length) * 22),
         eta_seconds: Math.max(25, 90 - index * 10),
       });
     }
@@ -146,13 +248,14 @@ export async function processJob(jobId: string, userId: string) {
     await updateJob(jobId, userId, {
       status: "building",
       stage: "building",
-      progress: 60,
-      eta_seconds: 45,
+      progress: 55,
+      eta_seconds: 50,
     });
 
     const listFile = join(workDir, "concat.txt");
     await writeConcatList(listFile, clipPaths);
-    const landscapeLocal = join(workDir, "landscape.mp4");
+    const concatLocal = join(workDir, "concat-raw.mp4");
+    // Re-encode so silent + audio clips merge cleanly
     await run(bin, [
       "-y",
       "-f",
@@ -161,25 +264,16 @@ export async function processJob(jobId: string, userId: string) {
       "0",
       "-i",
       listFile,
-      "-c",
-      "copy",
-      landscapeLocal,
-    ]);
-
-    await updateJob(jobId, userId, {
-      status: "rendering",
-      stage: "rendering",
-      progress: 78,
-      eta_seconds: 25,
-    });
-
-    const verticalLocal = join(workDir, "vertical.mp4");
-    await run(bin, [
-      "-y",
+      "-f",
+      "lavfi",
       "-i",
-      landscapeLocal,
-      "-vf",
-      "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920",
+      "anullsrc=channel_layout=stereo:sample_rate=44100",
+      "-filter_complex",
+      "[0:v]format=yuv420p[v];[0:a]aformat=sample_rates=44100:channel_layouts=stereo[a0];[1:a][a0]amix=inputs=2:duration=first:dropout_transition=0,volume=1[a]",
+      "-map",
+      "[v]",
+      "-map",
+      "[a]",
       "-c:v",
       "libx264",
       "-preset",
@@ -188,13 +282,203 @@ export async function processJob(jobId: string, userId: string) {
       "23",
       "-c:a",
       "aac",
+      "-shortest",
+      concatLocal,
+    ]).catch(async () => {
+      await run(bin, [
+        "-y",
+        "-f",
+        "concat",
+        "-safe",
+        "0",
+        "-i",
+        listFile,
+        "-f",
+        "lavfi",
+        "-i",
+        "anullsrc=channel_layout=stereo:sample_rate=44100",
+        "-map",
+        "0:v",
+        "-map",
+        "1:a",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-crf",
+        "23",
+        "-c:a",
+        "aac",
+        "-shortest",
+        concatLocal,
+      ]);
+    });
+
+    const withAudioBase = concatLocal;
+    let withAudio = withAudioBase;
+    if (track && (await fileExists(trackAbsolutePath(track)))) {
+      const mixed = join(workDir, "with-music.mp4");
+      const musicPath = trackAbsolutePath(track);
+      await run(bin, [
+        "-y",
+        "-i",
+        withAudioBase,
+        "-stream_loop",
+        "-1",
+        "-i",
+        musicPath,
+        "-filter_complex",
+        "[0:a]volume=0.18[orig];[1:a]volume=0.72,afade=t=in:st=0:d=1.2[bg];[orig][bg]amix=inputs=2:duration=first:dropout_transition=2[a]",
+        "-map",
+        "0:v",
+        "-map",
+        "[a]",
+        "-c:v",
+        "copy",
+        "-c:a",
+        "aac",
+        "-shortest",
+        mixed,
+      ]);
+      withAudio = mixed;
+    }
+
+    await updateJob(jobId, userId, {
+      status: "rendering",
+      stage: "rendering",
+      progress: 72,
+      eta_seconds: 35,
+    });
+
+    const endLandscape = join(workDir, "end-landscape.mp4");
+    const endVertical = join(workDir, "end-vertical.mp4");
+    await makeEndCardClip(bin, "landscape", endLandscape);
+    await makeEndCardClip(bin, "vertical", endVertical);
+
+    const landscapeBody = join(workDir, "landscape-body.mp4");
+    await run(bin, [
+      "-y",
+      "-i",
+      withAudio,
+      "-vf",
+      isPro
+        ? "format=yuv420p"
+        : `${watermarkDrawtextFilter({ fontSize: 30, yRatio: 0.33, opacity: 0.36 })},format=yuv420p`,
+      "-c:v",
+      "libx264",
+      "-preset",
+      "veryfast",
+      "-crf",
+      "22",
+      "-c:a",
+      "aac",
       "-movflags",
       "+faststart",
-      verticalLocal,
+      landscapeBody,
     ]);
 
+    const landscapeList = join(workDir, "landscape-final.txt");
+    await writeConcatList(landscapeList, [landscapeBody, endLandscape]);
+    const landscapeLocal = join(workDir, "landscape.mp4");
+    await run(bin, [
+      "-y",
+      "-f",
+      "concat",
+      "-safe",
+      "0",
+      "-i",
+      landscapeList,
+      "-c",
+      "copy",
+      landscapeLocal,
+    ]).catch(async () => {
+      // Re-encode concat if codecs mismatch
+      await run(bin, [
+        "-y",
+        "-f",
+        "concat",
+        "-safe",
+        "0",
+        "-i",
+        landscapeList,
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-crf",
+        "22",
+        "-c:a",
+        "aac",
+        "-movflags",
+        "+faststart",
+        landscapeLocal,
+      ]);
+    });
+
+    const verticalBody = join(workDir, "vertical-body.mp4");
+    const verticalBase =
+      "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920";
+    const verticalVf = isPro
+      ? `${verticalBase},format=yuv420p`
+      : `${verticalBase},${watermarkDrawtextFilter({ fontSize: 26, yRatio: 0.33, opacity: 0.36 })},format=yuv420p`;
+
+    await run(bin, [
+      "-y",
+      "-i",
+      withAudio,
+      "-vf",
+      verticalVf,
+      "-c:v",
+      "libx264",
+      "-preset",
+      "veryfast",
+      "-crf",
+      "22",
+      "-c:a",
+      "aac",
+      "-movflags",
+      "+faststart",
+      verticalBody,
+    ]);
+
+    const verticalList = join(workDir, "vertical-final.txt");
+    await writeConcatList(verticalList, [verticalBody, endVertical]);
+    const verticalLocal = join(workDir, "vertical.mp4");
+    await run(bin, [
+      "-y",
+      "-f",
+      "concat",
+      "-safe",
+      "0",
+      "-i",
+      verticalList,
+      "-c",
+      "copy",
+      verticalLocal,
+    ]).catch(async () => {
+      await run(bin, [
+        "-y",
+        "-f",
+        "concat",
+        "-safe",
+        "0",
+        "-i",
+        verticalList,
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-crf",
+        "22",
+        "-c:a",
+        "aac",
+        "-movflags",
+        "+faststart",
+        verticalLocal,
+      ]);
+    });
+
     const supabase = getServiceSupabase();
-    // Private outputs under memories bucket
     const landscapePath = `outputs/${userId}/${jobId}/landscape.mp4`;
     const verticalPath = `outputs/${userId}/${jobId}/vertical.mp4`;
     const landscapeBytes = await readFile(landscapeLocal);
@@ -240,14 +524,15 @@ export async function processJob(jobId: string, userId: string) {
     await appendJobLog(userId, jobId, "process_completed", {
       ms: Date.now() - started,
       duration,
+      isPro,
+      mood: mood.id,
+      music: track?.id ?? null,
     });
     logInfo("process_completed", { jobId, userId, ms: Date.now() - started });
 
     try {
-      const { getJobForUser } = await import("@/lib/store");
       const { sendRecapReadyEmail } = await import("@/lib/email");
       const { getAppUrl } = await import("@/lib/billing/config");
-      const job = await getJobForUser(jobId, userId);
       if (job?.notify_email) {
         await sendRecapReadyEmail({
           to: job.notify_email,

@@ -14,7 +14,7 @@ async function main() {
     bin,
     workDir,
     files: [{ path: file, duration }],
-    targetSeconds: 6,
+    maxSeconds: 6,
   });
   console.log(JSON.stringify({ duration, pickCount: picks.length, picks }, null, 2));
 }

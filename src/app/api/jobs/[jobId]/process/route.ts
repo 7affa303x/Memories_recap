@@ -67,6 +67,25 @@ export async function POST(request: Request, { params }: Params) {
     return NextResponse.json({ error: "Upload videos first" }, { status: 400 });
   }
 
+  let body: {
+    musicMode?: "none" | "manual" | "auto";
+    trackId?: string | null;
+    mood?: "joyful" | "nostalgic" | "chill" | "epic" | null;
+  } = {};
+  try {
+    body = (await request.json()) as typeof body;
+  } catch {
+    body = {};
+  }
+
+  await updateJob(jobId, userId, {
+    recap_options: {
+      musicMode: body.musicMode || "auto",
+      trackId: body.trackId ?? null,
+      mood: body.mood || "joyful",
+    },
+  });
+
   const amount = creditsForBytes(job.total_bytes || 0);
 
   // Retry after failure: credits already reserved/restored flow — deduct is idempotent per jobId

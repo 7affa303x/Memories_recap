@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { getServiceSupabase } from "@/lib/supabase/admin";
 import {
   CREDIT_EXPIRY_DAYS,
+  DAILY_LOGIN_BALANCE_CAP,
+  DAILY_LOGIN_CREDITS,
   FREE_CREDITS,
 } from "@/lib/billing/config";
 import type {
@@ -22,6 +24,7 @@ function emptyState(userId: string, email: string): BillingState {
     email,
     creemCustomerId: null,
     freeGranted: false,
+    lastDailyLoginGrantAt: null,
     lots: [],
     subscription: null,
     transactions: [],
@@ -250,12 +253,45 @@ export async function ensureBillingUser(userId: string, email: string) {
   });
 }
 
+function utcDayKey(d = new Date()) {
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * +50 credits on daily login if balance <= 500. Idempotent per UTC day.
+ */
+export async function grantDailyLoginCredits(userId: string, email: string) {
+  await ensureBillingUser(userId, email);
+  return mutate(userId, email, (state) => {
+    const today = utcDayKey();
+    if (state.lastDailyLoginGrantAt === today) return;
+    const balance = availableCredits(state);
+    if (balance > DAILY_LOGIN_BALANCE_CAP) {
+      state.lastDailyLoginGrantAt = today;
+      return;
+    }
+    addLot(state, { amount: DAILY_LOGIN_CREDITS, source: "daily_login" });
+    state.lastDailyLoginGrantAt = today;
+    state.transactions.unshift({
+      id: randomUUID(),
+      type: "daily_login_grant",
+      amount: DAILY_LOGIN_CREDITS,
+      createdAt: new Date().toISOString(),
+      metadata: { day: today, balanceBefore: balance },
+    });
+  });
+}
+
 export async function getBillingSummary(userId: string, email: string) {
   try {
-    const state = await ensureBillingUser(userId, email);
+    await ensureBillingUser(userId, email);
+    const state = await grantDailyLoginCredits(userId, email);
     return {
       balance: availableCredits(state),
       freeGranted: state.freeGranted,
+      dailyLoginGrantedToday: state.lastDailyLoginGrantAt === utcDayKey(),
+      dailyLoginAmount: DAILY_LOGIN_CREDITS,
+      dailyLoginCap: DAILY_LOGIN_BALANCE_CAP,
       subscription: state.subscription,
       lots: state.lots.filter(
         (lot) => lot.remainingAmount > 0 && new Date(lot.expiresAt) > new Date()
@@ -270,6 +306,9 @@ export async function getBillingSummary(userId: string, email: string) {
     return {
       balance: availableCredits(state),
       freeGranted: state.freeGranted,
+      dailyLoginGrantedToday: state.lastDailyLoginGrantAt === utcDayKey(),
+      dailyLoginAmount: DAILY_LOGIN_CREDITS,
+      dailyLoginCap: DAILY_LOGIN_BALANCE_CAP,
       subscription: state.subscription,
       lots: state.lots.filter(
         (lot) => lot.remainingAmount > 0 && new Date(lot.expiresAt) > new Date()

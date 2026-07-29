@@ -114,6 +114,7 @@ export async function createJob(input: {
     share_password_hash: null,
     credits_charged: null,
     title: input.title ?? null,
+    recap_options: null,
     version: 0,
     created_at: now,
     updated_at: now,
@@ -159,6 +160,7 @@ export async function updateJob(
       | "share_password_hash"
       | "credits_charged"
       | "title"
+      | "recap_options"
     >
   >
 ) {

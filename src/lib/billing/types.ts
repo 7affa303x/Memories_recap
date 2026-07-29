@@ -1,4 +1,9 @@
-export type CreditSource = "free" | "subscription" | "pack" | "refund_restore";
+export type CreditSource =
+  | "free"
+  | "subscription"
+  | "pack"
+  | "refund_restore"
+  | "daily_login";
 
 export type BillingSubscription = {
   id: string;
@@ -50,6 +55,8 @@ export type BillingState = {
   paddleCustomerId?: string | null;
   polarCustomerId?: string | null;
   freeGranted: boolean;
+  /** YYYY-MM-DD UTC of last daily login credit grant */
+  lastDailyLoginGrantAt?: string | null;
   lots: CreditLot[];
   subscription: BillingSubscription | null;
   transactions: BillingTransaction[];

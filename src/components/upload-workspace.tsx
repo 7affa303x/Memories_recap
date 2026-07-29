@@ -55,6 +55,14 @@ async function uploadWithProgress(
   });
 }
 
+type MusicTrackOption = {
+  id: string;
+  title: string;
+  mood: string;
+  vibe: string;
+  previewUrl: string;
+};
+
 export function UploadWorkspace({
   initialBalance,
 }: {
@@ -67,12 +75,31 @@ export function UploadWorkspace({
   const [error, setError] = useState<string | null>(null);
   const [balance, setBalance] = useState(initialBalance);
   const [isPending, startTransition] = useTransition();
+  const [musicMode, setMusicMode] = useState<"none" | "manual" | "auto">(
+    "auto"
+  );
+  const [mood, setMood] = useState("joyful");
+  const [trackId, setTrackId] = useState<string>("");
+  const [tracks, setTracks] = useState<MusicTrackOption[]>([]);
+  const [moods, setMoods] = useState<Array<{ id: string; label: string }>>([]);
+  const [dailyNote, setDailyNote] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/billing/credits")
       .then((r) => r.json())
       .then((j) => {
         if (typeof j.balance === "number") setBalance(j.balance);
+        if (j.dailyLoginGrantedToday && j.dailyLoginAmount) {
+          setDailyNote(`+${j.dailyLoginAmount} daily credits`);
+        }
+      })
+      .catch(() => undefined);
+    fetch("/api/music")
+      .then((r) => r.json())
+      .then((j) => {
+        if (Array.isArray(j.tracks)) setTracks(j.tracks);
+        if (Array.isArray(j.moods)) setMoods(j.moods);
+        if (j.tracks?.[0]?.id) setTrackId(j.tracks[0].id);
       })
       .catch(() => undefined);
   }, []);
@@ -214,6 +241,12 @@ export function UploadWorkspace({
 
         const processRes = await fetch(`/api/jobs/${jobId}/process`, {
           method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            musicMode,
+            mood,
+            trackId: musicMode === "manual" ? trackId : null,
+          }),
         });
         const processJson = await processRes.json();
         if (processRes.status === 402) {
@@ -244,6 +277,71 @@ export function UploadWorkspace({
           <Link href="/pricing" className="text-green-700 underline">
             Buy credits
           </Link>
+        </p>
+        {dailyNote ? (
+          <p className="mt-1 text-green-700">{dailyNote}</p>
+        ) : null}
+      </div>
+
+      <div className="space-y-3 rounded-[16px] bg-neutral-50 p-4 shadow-sm">
+        <p className="text-sm font-medium text-neutral-900">Recap style</p>
+        <div className="grid gap-2 sm:grid-cols-4">
+          {moods.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => setMood(m.id)}
+              className={`min-h-11 rounded-xl px-3 text-sm ${
+                mood === m.id
+                  ? "bg-neutral-900 text-white"
+                  : "bg-white text-neutral-700"
+              }`}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+        <p className="pt-1 text-sm font-medium text-neutral-900">Music</p>
+        <div className="grid gap-2 sm:grid-cols-3">
+          {(
+            [
+              ["auto", "Auto"],
+              ["manual", "Choose"],
+              ["none", "No music"],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setMusicMode(value)}
+              className={`min-h-11 rounded-xl px-3 text-sm ${
+                musicMode === value
+                  ? "bg-neutral-900 text-white"
+                  : "bg-white text-neutral-700"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {musicMode === "manual" ? (
+          <select
+            className="mt-1 h-11 w-full rounded-xl border border-neutral-200 bg-white px-3 text-sm"
+            value={trackId}
+            onChange={(e) => setTrackId(e.target.value)}
+          >
+            {tracks
+              .filter((t) => t.mood === mood)
+              .concat(tracks.filter((t) => t.mood !== mood))
+              .map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.title} · {t.vibe}
+                </option>
+              ))}
+          </select>
+        ) : null}
+        <p className="text-xs text-neutral-500">
+          Mostly soundless under the track — big laughs and cheers stay.
         </p>
       </div>
 

@@ -18,6 +18,12 @@ export type UserRow = {
   updated_at: string;
 };
 
+export type RecapOptions = {
+  musicMode: "none" | "manual" | "auto";
+  trackId?: string | null;
+  mood?: "joyful" | "nostalgic" | "chill" | "epic" | null;
+};
+
 export type JobRow = {
   id: string;
   user_id: string;
@@ -34,6 +40,7 @@ export type JobRow = {
   share_password_hash: string | null;
   credits_charged: number | null;
   title: string | null;
+  recap_options?: RecapOptions | null;
   version: number;
   created_at: string;
   updated_at: string;

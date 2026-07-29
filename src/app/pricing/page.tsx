@@ -43,7 +43,8 @@ export default async function PricingPage() {
           <p className="text-sm text-neutral-500">Free</p>
           <p className="mt-2 text-3xl font-medium">{FREE_CREDITS} credits</p>
           <p className="mt-2 text-sm text-neutral-500">
-            One-time for new accounts · ~{FREE_CREDITS} MB processed
+            On signup · +50 daily when balance ≤ 500 · music + moods included ·
+            light watermark · brand end card
           </p>
         </div>
 
@@ -52,7 +53,8 @@ export default async function PricingPage() {
             <p className="text-sm text-neutral-500">Pro Monthly</p>
             <p className="mt-2 text-3xl font-medium">${PRODUCT_USD.subscription}</p>
             <p className="mt-1 text-sm text-neutral-500">
-              {PRODUCT_CREDITS.subscription} credits / month · cancel anytime
+              {PRODUCT_CREDITS.subscription} credits / month · stronger AI · no
+              overlay watermark · end card kept · cancel anytime
             </p>
           </div>
           {user ? (
