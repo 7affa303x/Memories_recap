@@ -102,6 +102,24 @@ export default async function LandingPage({
         </section>
 
         <section className="mt-16 space-y-4">
+          <div className="overflow-hidden rounded-[20px] border border-green-100 bg-gradient-to-r from-indigo-900 to-purple-900 p-6 text-white shadow-lg">
+            <p className="text-xs uppercase tracking-widest text-purple-300">New</p>
+            <p className="mt-2 font-display text-2xl font-semibold leading-snug">
+              Interactive Cinematic Journey
+            </p>
+            <p className="mt-2 text-sm text-purple-100/80">
+              Experience our first cinematic scene — Sky to Beach. Tap to travel from orbit to a tropical shore.
+            </p>
+            <a
+              href="/journey"
+              className="mt-4 inline-block rounded-full bg-white/20 backdrop-blur-sm px-6 py-3 text-sm font-medium text-white hover:bg-white/30 transition-colors"
+            >
+              Enter the Journey →
+            </a>
+          </div>
+        </section>
+
+        <section className="mt-16 space-y-4">
           <h2 className="font-display text-2xl font-semibold tracking-tight text-neutral-900">
             Who is this for?
           </h2>
