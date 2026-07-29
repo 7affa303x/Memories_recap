@@ -46,3 +46,4 @@ next-env.d.ts
 scripts/gumroad-env.generated.txt
 scripts/*-env.generated.txt
 .env*
+memories-recap-*/

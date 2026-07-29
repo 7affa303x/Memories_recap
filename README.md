@@ -2,46 +2,17 @@
 
 Turn heavy memories into watchable moments.
 
-## Product flow
+## Higgsfield app (current)
 
-Landing → Upload → Processing → Result → Share
+The product now runs as a **Higgsfield app** (Sign in with Higgsfield + Seedance video generation), built with Cursor + Higgsfield MCP instead of Claude Code / VS Code.
 
-Google sign-in only. Original videos stay untouched by default.
+- Live: https://memories-recap.higgsfield.app
+- Flow: pick a mood (Joyful / Nostalgic / Chill / Epic) → add a memory photo → generate a calm share-ready film
+- Auth & credits: Higgsfield account
+- Stack: React 19 + TanStack Start on Cloudflare Workers, Quanta UI, fnf SDK, D1 prefs/favorites
 
-## Stack
+This GitHub repo keeps the earlier Next.js / Vercel MVP history for reference. New product work continues on the Higgsfield app.
 
-- Next.js App Router + TypeScript + Tailwind + shadcn/ui
-- Auth.js (Google OAuth)
-- Supabase private Storage (`memories`, `app-data`, `recaps`)
-- Creem Merchant of Record billing (live)
-- FFmpeg + optional Gemini/Groq/OpenAI vision scoring
-- Vercel
+## Legacy Next.js MVP (archived in branches)
 
-## Live site
-
-https://memories-recap-one.vercel.app
-
-## Billing (Creem)
-
-Pages:
-- `/pricing` — Free, Pro Monthly, Credit Packs
-- `/billing` — current credits, renewal, portal, invoices
-
-Webhook:
-- `POST /api/webhooks/creem` (signed only)
-
-## Optional env
-
-- `RESEND_API_KEY` — email when recap is ready
-- `NEXT_PUBLIC_META_PIXEL_ID` / `NEXT_PUBLIC_TIKTOK_PIXEL_ID` — ads pixels
-- `GEMINI_API_KEY` / `GROQ_API_KEY` — vision scoring
-
-## Setup
-
-```bash
-cp .env.example .env.local
-npm install
-npm run dev
-```
-
-Health check: `GET /api/health`
+Earlier cloud-agent branches shipped a Next.js App Router MVP (Auth.js Google OAuth, Supabase, FFmpeg smart-select, billing). Those branches remain under `cursor/*` for history; they are not the primary product surface anymore.
