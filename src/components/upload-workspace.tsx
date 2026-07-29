@@ -83,6 +83,8 @@ export function UploadWorkspace({
   const [tracks, setTracks] = useState<MusicTrackOption[]>([]);
   const [moods, setMoods] = useState<Array<{ id: string; label: string }>>([]);
   const [dailyNote, setDailyNote] = useState<string | null>(null);
+  const [isPro, setIsPro] = useState(false);
+  const [outputQuality, setOutputQuality] = useState<"fhd" | "uhd">("fhd");
 
   useEffect(() => {
     fetch("/api/billing/credits")
@@ -92,6 +94,8 @@ export function UploadWorkspace({
         if (j.dailyLoginGrantedToday && j.dailyLoginAmount) {
           setDailyNote(`+${j.dailyLoginAmount} daily credits`);
         }
+        const status = j.subscription?.status as string | undefined;
+        setIsPro(status === "active" || status === "trialing");
       })
       .catch(() => undefined);
     fetch("/api/music")
@@ -246,6 +250,7 @@ export function UploadWorkspace({
             musicMode,
             mood,
             trackId: musicMode === "manual" ? trackId : null,
+            outputQuality: isPro ? outputQuality : "fhd",
           }),
         });
         const processJson = await processRes.json();
@@ -343,6 +348,42 @@ export function UploadWorkspace({
         <p className="text-xs text-neutral-500">
           Mostly soundless under the track — big laughs and cheers stay.
         </p>
+        {isPro ? (
+          <div className="pt-2">
+            <p className="text-sm font-medium text-neutral-900">Output</p>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => setOutputQuality("fhd")}
+                className={`min-h-11 rounded-xl px-3 text-sm ${
+                  outputQuality === "fhd"
+                    ? "bg-neutral-900 text-white"
+                    : "bg-white text-neutral-700"
+                }`}
+              >
+                Full HD
+              </button>
+              <button
+                type="button"
+                onClick={() => setOutputQuality("uhd")}
+                className={`min-h-11 rounded-xl px-3 text-sm ${
+                  outputQuality === "uhd"
+                    ? "bg-neutral-900 text-white"
+                    : "bg-white text-neutral-700"
+                }`}
+              >
+                4K UHD
+              </button>
+            </div>
+            <p className="mt-2 text-xs text-neutral-500">
+              4K keeps more detail from phone footage. Takes longer to render.
+            </p>
+          </div>
+        ) : (
+          <p className="text-xs text-neutral-500">
+            Output is Full HD. Pro unlocks 4K and removes the overlay watermark.
+          </p>
+        )}
       </div>
 
       <button

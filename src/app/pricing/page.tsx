@@ -53,8 +53,8 @@ export default async function PricingPage() {
             <p className="text-sm text-neutral-500">Pro Monthly</p>
             <p className="mt-2 text-3xl font-medium">${PRODUCT_USD.subscription}</p>
             <p className="mt-1 text-sm text-neutral-500">
-              {PRODUCT_CREDITS.subscription} credits / month · stronger AI · no
-              overlay watermark · end card kept · cancel anytime
+              {PRODUCT_CREDITS.subscription} credits / month · stronger AI · 4K
+              output · no overlay watermark · end card kept · cancel anytime
             </p>
           </div>
           {user ? (

@@ -25,7 +25,10 @@ import { shouldKeepOriginalAudio } from "@/lib/audio-keep";
 import {
   END_CARD_SECONDS,
   endCardImagePath,
-  watermarkDrawtextFilter,
+  renderSizes,
+  watermarkOverlayFilter,
+  watermarkOverlayPath,
+  type OutputQuality,
 } from "@/lib/branding-video";
 import { getMood } from "@/lib/mood";
 import {
@@ -71,10 +74,11 @@ async function fileExists(path: string) {
 async function makeEndCardClip(
   bin: string,
   orientation: "landscape" | "vertical",
-  outPath: string
+  outPath: string,
+  size: { w: number; h: number }
 ) {
   const image = endCardImagePath(orientation);
-  const size = orientation === "vertical" ? "1080:1920" : "1920:1080";
+  const dim = `${size.w}:${size.h}`;
   await run(bin, [
     "-y",
     "-loop",
@@ -88,7 +92,7 @@ async function makeEndCardClip(
     "-t",
     String(END_CARD_SECONDS),
     "-vf",
-    `scale=${size}:force_original_aspect_ratio=decrease,pad=${size}:(ow-iw)/2:(oh-ih)/2,format=yuv420p`,
+    `scale=${dim}:force_original_aspect_ratio=decrease,pad=${dim}:(ow-iw)/2:(oh-ih)/2,format=yuv420p`,
     "-c:v",
     "libx264",
     "-preset",
@@ -136,6 +140,14 @@ export async function processJob(jobId: string, userId: string) {
   } catch {
     isPro = false;
   }
+
+  const outputQuality: OutputQuality =
+    isPro && options.outputQuality === "uhd" ? "uhd" : "fhd";
+  const sizes = renderSizes(outputQuality);
+  const lw = sizes.landscape.w;
+  const lh = sizes.landscape.h;
+  const vw = sizes.vertical.w;
+  const vh = sizes.vertical.h;
 
   const uploads = await listUploads(jobId, userId);
   if (uploads.length === 0) {
@@ -226,13 +238,13 @@ export async function processJob(jobId: string, userId: string) {
         "-t",
         pick.duration.toFixed(2),
         "-vf",
-        `scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,fps=30,${mood.colorFilter}`,
+        `scale=${lw}:${lh}:force_original_aspect_ratio=decrease,pad=${lw}:${lh}:(ow-iw)/2:(oh-ih)/2,fps=30,${mood.colorFilter}`,
         "-c:v",
         "libx264",
         "-preset",
-        "veryfast",
+        sizes.preset,
         "-crf",
-        "23",
+        String(sizes.crf + 1),
         ...audioFilter,
         "-movflags",
         "+faststart",
@@ -352,30 +364,51 @@ export async function processJob(jobId: string, userId: string) {
 
     const endLandscape = join(workDir, "end-landscape.mp4");
     const endVertical = join(workDir, "end-vertical.mp4");
-    await makeEndCardClip(bin, "landscape", endLandscape);
-    await makeEndCardClip(bin, "vertical", endVertical);
+    await makeEndCardClip(bin, "landscape", endLandscape, sizes.landscape);
+    await makeEndCardClip(bin, "vertical", endVertical, sizes.vertical);
 
     const landscapeBody = join(workDir, "landscape-body.mp4");
-    await run(bin, [
-      "-y",
-      "-i",
-      withAudio,
-      "-vf",
-      isPro
-        ? "format=yuv420p"
-        : `${watermarkDrawtextFilter({ fontSize: 30, yRatio: 0.33, opacity: 0.36 })},format=yuv420p`,
-      "-c:v",
-      "libx264",
-      "-preset",
-      "veryfast",
-      "-crf",
-      "22",
-      "-c:a",
-      "aac",
-      "-movflags",
-      "+faststart",
-      landscapeBody,
-    ]);
+    if (isPro) {
+      await run(bin, [
+        "-y",
+        "-i",
+        withAudio,
+        "-vf",
+        "format=yuv420p",
+        "-c:v",
+        "libx264",
+        "-preset",
+        sizes.preset,
+        "-crf",
+        String(sizes.crf),
+        "-c:a",
+        "aac",
+        "-movflags",
+        "+faststart",
+        landscapeBody,
+      ]);
+    } else {
+      await run(bin, [
+        "-y",
+        "-i",
+        withAudio,
+        "-i",
+        watermarkOverlayPath(),
+        "-filter_complex",
+        watermarkOverlayFilter(lw),
+        "-c:v",
+        "libx264",
+        "-preset",
+        sizes.preset,
+        "-crf",
+        String(sizes.crf),
+        "-c:a",
+        "aac",
+        "-movflags",
+        "+faststart",
+        landscapeBody,
+      ]);
+    }
 
     const landscapeList = join(workDir, "landscape-final.txt");
     await writeConcatList(landscapeList, [landscapeBody, endLandscape]);
@@ -416,30 +449,48 @@ export async function processJob(jobId: string, userId: string) {
     });
 
     const verticalBody = join(workDir, "vertical-body.mp4");
-    const verticalBase =
-      "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920";
-    const verticalVf = isPro
-      ? `${verticalBase},format=yuv420p`
-      : `${verticalBase},${watermarkDrawtextFilter({ fontSize: 26, yRatio: 0.33, opacity: 0.36 })},format=yuv420p`;
-
-    await run(bin, [
-      "-y",
-      "-i",
-      withAudio,
-      "-vf",
-      verticalVf,
-      "-c:v",
-      "libx264",
-      "-preset",
-      "veryfast",
-      "-crf",
-      "22",
-      "-c:a",
-      "aac",
-      "-movflags",
-      "+faststart",
-      verticalBody,
-    ]);
+    const verticalBase = `scale=${vw}:${vh}:force_original_aspect_ratio=increase,crop=${vw}:${vh}`;
+    if (isPro) {
+      await run(bin, [
+        "-y",
+        "-i",
+        withAudio,
+        "-vf",
+        `${verticalBase},format=yuv420p`,
+        "-c:v",
+        "libx264",
+        "-preset",
+        sizes.preset,
+        "-crf",
+        String(sizes.crf),
+        "-c:a",
+        "aac",
+        "-movflags",
+        "+faststart",
+        verticalBody,
+      ]);
+    } else {
+      await run(bin, [
+        "-y",
+        "-i",
+        withAudio,
+        "-i",
+        watermarkOverlayPath(),
+        "-filter_complex",
+        `[0:v]${verticalBase}[base];[1:v]scale=${vw}:-1[wm];[base][wm]overlay=(W-w)/2:H*0.33-h/2,format=yuv420p`,
+        "-c:v",
+        "libx264",
+        "-preset",
+        sizes.preset,
+        "-crf",
+        String(sizes.crf),
+        "-c:a",
+        "aac",
+        "-movflags",
+        "+faststart",
+        verticalBody,
+      ]);
+    }
 
     const verticalList = join(workDir, "vertical-final.txt");
     await writeConcatList(verticalList, [verticalBody, endVertical]);
@@ -527,6 +578,7 @@ export async function processJob(jobId: string, userId: string) {
       isPro,
       mood: mood.id,
       music: track?.id ?? null,
+      outputQuality,
     });
     logInfo("process_completed", { jobId, userId, ms: Date.now() - started });
 

@@ -98,6 +98,13 @@ export default async function BillingPage({
               ? `already used (${FREE_CREDITS} credits)`
               : "available on first sign-in"}
           </p>
+          {"dailyLoginAmount" in summary && summary.dailyLoginAmount ? (
+            <p className="mt-2 text-sm text-neutral-500">
+              Daily login: +{summary.dailyLoginAmount} credits when balance ≤{" "}
+              {summary.dailyLoginCap}
+              {summary.dailyLoginGrantedToday ? " · credited today" : ""}.
+            </p>
+          ) : null}
         </div>
 
         <div className="rounded-[16px] bg-neutral-50 p-5 shadow-sm">

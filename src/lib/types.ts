@@ -22,6 +22,8 @@ export type RecapOptions = {
   musicMode: "none" | "manual" | "auto";
   trackId?: string | null;
   mood?: "joyful" | "nostalgic" | "chill" | "epic" | null;
+  /** Pro-only: uhd = 4K landscape / 4K-tall vertical */
+  outputQuality?: "fhd" | "uhd" | null;
 };
 
 export type JobRow = {

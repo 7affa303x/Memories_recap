@@ -71,6 +71,7 @@ export async function POST(request: Request, { params }: Params) {
     musicMode?: "none" | "manual" | "auto";
     trackId?: string | null;
     mood?: "joyful" | "nostalgic" | "chill" | "epic" | null;
+    outputQuality?: "fhd" | "uhd" | null;
   } = {};
   try {
     body = (await request.json()) as typeof body;
@@ -83,6 +84,7 @@ export async function POST(request: Request, { params }: Params) {
       musicMode: body.musicMode || "auto",
       trackId: body.trackId ?? null,
       mood: body.mood || "joyful",
+      outputQuality: body.outputQuality === "uhd" ? "uhd" : "fhd",
     },
   });
 
