@@ -1,4 +1,5 @@
-import { access, mkdtemp, readFile, rm, createReadStream } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm } from "node:fs/promises";
+import { createReadStream } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
@@ -100,7 +101,7 @@ async function makeEndCardClip(
     const fontSize = Math.max(28, Math.round(size.w * 0.028));
     vf += `,drawtext=fontfile='${escapedFont}':text='${escaped}':fontsize=${fontSize}:fontcolor=white:borderw=2:bordercolor=black@0.35:x=(w-text_w)/2:y=h*0.78`;
   }
-  await run(bin, [
+  const args = [
     "-y",
     "-loop",
     "1",
@@ -126,7 +127,20 @@ async function makeEndCardClip(
     "-movflags",
     "+faststart",
     outPath,
-  ]);
+  ];
+
+  try {
+    await run(bin, args);
+  } catch (err) {
+    // If drawtext filter is missing, try again without it
+    if (vf.includes("drawtext")) {
+      const fallbackVf = `scale=${dim}:force_original_aspect_ratio=decrease,pad=${dim}:(ow-iw)/2:(oh-ih)/2,format=yuv420p`;
+      args[args.indexOf("-vf") + 1] = fallbackVf;
+      await run(bin, args);
+    } else {
+      throw err;
+    }
+  }
 }
 
 export async function processJob(jobId: string, userId: string) {
