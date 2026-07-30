@@ -37,11 +37,29 @@ export function getAppUrl() {
   ).replace(/\/$/, "");
 }
 
-/** Active merchant of record: gumroad | creem */
-export function getBillingProvider(): "gumroad" | "creem" {
+export function getPaddleEnvironment(): "sandbox" | "production" {
+  const env = process.env.NEXT_PUBLIC_PADDLE_ENV || process.env.PADDLE_ENV;
+  return env === "sandbox" ? "sandbox" : "production";
+}
+
+export function getPaddleApiKey() {
+  return required("PADDLE_API_KEY");
+}
+
+export function getPaddleWebhookSecret() {
+  return required("PADDLE_NOTIFICATION_WEBHOOK_SECRET");
+}
+
+export function getPaddleClientToken() {
+  return required("NEXT_PUBLIC_PADDLE_CLIENT_TOKEN");
+}
+
+/** Active merchant of record: paddle | gumroad | creem */
+export function getBillingProvider(): "paddle" | "gumroad" | "creem" {
   const raw = (process.env.BILLING_PROVIDER || "").toLowerCase();
-  if (raw === "gumroad" || raw === "creem") return raw;
+  if (raw === "paddle" || raw === "gumroad" || raw === "creem") return raw;
   // Prefer Gumroad when token + at least one permalink are present
+  // (keeps current production stable until BILLING_PROVIDER=paddle is set).
   if (
     process.env.GUMROAD_ACCESS_TOKEN &&
     (process.env.GUMROAD_PERMALINK_CREDITS_SMALL ||
@@ -49,21 +67,63 @@ export function getBillingProvider(): "gumroad" | "creem" {
   ) {
     return "gumroad";
   }
+  if (
+    process.env.PADDLE_API_KEY &&
+    (process.env.PADDLE_PRICE_CREDITS_SMALL ||
+      process.env.PADDLE_PRICE_SUBSCRIPTION)
+  ) {
+    return "paddle";
+  }
   return "creem";
 }
 
+export function getPriceId(key: ProductKey) {
+  const map: Record<ProductKey, string> = {
+    subscription: "PADDLE_PRICE_SUBSCRIPTION",
+    credits_small: "PADDLE_PRICE_CREDITS_SMALL",
+    credits_medium: "PADDLE_PRICE_CREDITS_MEDIUM",
+    credits_large: "PADDLE_PRICE_CREDITS_LARGE",
+  };
+  return required(map[key]);
+}
+
+export function productKeyFromPriceId(priceId: string): ProductKey | null {
+  const entries: Array<[ProductKey, string | undefined]> = [
+    ["subscription", process.env.PADDLE_PRICE_SUBSCRIPTION],
+    ["credits_small", process.env.PADDLE_PRICE_CREDITS_SMALL],
+    ["credits_medium", process.env.PADDLE_PRICE_CREDITS_MEDIUM],
+    ["credits_large", process.env.PADDLE_PRICE_CREDITS_LARGE],
+  ];
+  for (const [key, id] of entries) {
+    if (id && id === priceId) return key;
+  }
+  return null;
+}
+
 export const FREE_CREDITS = numberEnv("FREE_CREDITS", 200);
-/** Daily login top-up when balance is low. */
-export const DAILY_LOGIN_CREDITS = numberEnv("DAILY_LOGIN_CREDITS", 30);
-export const DAILY_LOGIN_BALANCE_CAP = numberEnv("DAILY_LOGIN_BALANCE_CAP", 300);
+/** Daily visit Moments when balance is under the cap. */
+export const DAILY_LOGIN_CREDITS = numberEnv("DAILY_LOGIN_CREDITS", 50);
+export const DAILY_LOGIN_BALANCE_CAP = numberEnv("DAILY_LOGIN_BALANCE_CAP", 800);
 export const CREDIT_EXPIRY_DAYS = numberEnv("CREDIT_EXPIRY_DAYS", 90);
 export const MIN_JOB_CREDITS = numberEnv("MIN_JOB_CREDITS", 10);
 
 export const PRODUCT_CREDITS: Record<ProductKey, number> = {
-  subscription: numberEnv("CREEM_CREDITS_SUBSCRIPTION", 2000),
-  credits_small: numberEnv("CREEM_CREDITS_SMALL", 500),
-  credits_medium: numberEnv("CREEM_CREDITS_MEDIUM", 2000),
-  credits_large: numberEnv("CREEM_CREDITS_LARGE", 5000),
+  subscription: numberEnv(
+    "PADDLE_CREDITS_SUBSCRIPTION",
+    numberEnv("CREEM_CREDITS_SUBSCRIPTION", 2000)
+  ),
+  credits_small: numberEnv(
+    "PADDLE_CREDITS_SMALL",
+    numberEnv("CREEM_CREDITS_SMALL", 500)
+  ),
+  credits_medium: numberEnv(
+    "PADDLE_CREDITS_MEDIUM",
+    numberEnv("CREEM_CREDITS_MEDIUM", 2000)
+  ),
+  credits_large: numberEnv(
+    "PADDLE_CREDITS_LARGE",
+    numberEnv("CREEM_CREDITS_LARGE", 5000)
+  ),
 };
 
 /** Display prices in USD (mirrors Creem catalog). */

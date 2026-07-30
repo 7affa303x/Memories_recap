@@ -1,10 +1,43 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
+import { cookies } from "next/headers";
 import { upsertUser } from "@/lib/jobs";
 import { ensureBillingUser } from "@/lib/billing/credits";
 import { sendWelcomeEmail } from "@/lib/email/welcome";
+import { REFERRALS_ENABLED } from "@/lib/flags";
+import {
+  grantReferralInvitee,
+  grantReferralInviter,
+} from "@/lib/rewards/grants";
+import { getServiceSupabase } from "@/lib/supabase/admin";
 
 const useSecureCookies = process.env.NODE_ENV === "production";
+
+async function applyReferralReward(inviteeId: string, inviteeEmail: string) {
+  if (!REFERRALS_ENABLED) return;
+  try {
+    const jar = await cookies();
+    const inviterId = jar.get("mr_ref")?.value;
+    if (!inviterId || inviterId === inviteeId) return;
+
+    const supabase = getServiceSupabase();
+    const { data } = await supabase.storage
+      .from("app-data")
+      .download(`users/${inviterId}.json`);
+    if (!data) return;
+    const inviter = JSON.parse(await data.text()) as {
+      id: string;
+      email?: string;
+    };
+    if (!inviter.email) return;
+
+    await grantReferralInvitee(inviteeId, inviteeEmail, inviterId);
+    await grantReferralInviter(inviter.id, inviter.email, inviteeId);
+    jar.delete("mr_ref");
+  } catch (error) {
+    console.error("referral apply failed", error);
+  }
+}
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
@@ -67,9 +100,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           name: user.name ?? null,
           image: user.image ?? null,
         });
-        // Non-blocking for login success; upload page also ensures billing
         await ensureBillingUser(account.providerAccountId, user.email);
-        // First-time welcome (no-ops without RESEND_API_KEY; once per user)
+        await applyReferralReward(account.providerAccountId, user.email);
         await sendWelcomeEmail({
           to: user.email,
           name: user.name,
@@ -87,7 +119,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       } else if (!token.uid && profile && "sub" in profile && profile.sub) {
         token.uid = profile.sub;
       }
-      // Persist Google profile photo like Gmail (JWT sessions drop it otherwise)
       const picture =
         (user as { image?: string | null } | undefined)?.image ||
         (profile && "picture" in profile

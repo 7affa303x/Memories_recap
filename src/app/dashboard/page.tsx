@@ -6,8 +6,10 @@ import { Button } from "@/components/ui/button";
 import { STAGE_LABELS, type JobRow } from "@/lib/types";
 import { AppHeader } from "@/components/app-header";
 import { JobCancelButton } from "@/components/job-cancel-button";
+import { StreakBanner } from "@/components/streak-banner";
 import { dashboardCareLine, welcomeLine } from "@/lib/greeting";
 import { signedRecapUrl } from "@/lib/supabase/admin";
+import { getBillingSummary } from "@/lib/billing/credits";
 
 export const metadata: Metadata = {
   title: "Dashboard · Memories Recap",
@@ -33,6 +35,7 @@ export default async function DashboardPage({
   const params = await searchParams;
   const activeTab: Tab = params.tab === "drafted" ? "drafted" : "memories";
   const jobs = await listJobsForUser(user.id);
+  const billing = await getBillingSummary(user.id, user.email).catch(() => null);
 
   const memories = jobs.filter((j) => j.status === "completed");
   const drafted = jobs.filter((j) => j.status !== "completed");
@@ -77,7 +80,12 @@ export default async function DashboardPage({
     <main className="mx-auto flex min-h-full w-full max-w-lg flex-col px-6 pb-16 pt-8">
       <AppHeader active="dashboard" />
 
-      <section className="mt-10 space-y-6">
+      <section className="mt-8 space-y-6">
+        <StreakBanner
+          initialStreak={billing?.streakCurrent || 0}
+          initialLongest={billing?.streakLongest || 0}
+        />
+
         <div className="flex items-end justify-between gap-3">
           <div>
             <p className="text-sm font-medium text-green-800">

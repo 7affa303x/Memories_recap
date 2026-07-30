@@ -11,9 +11,17 @@ export async function GET() {
     return NextResponse.redirect(new URL("/api/auth/signin", appUrl));
   }
 
-  if (getBillingProvider() === "gumroad") {
-    // Buyers manage cards / memberships on Gumroad
+  const provider = getBillingProvider();
+
+  if (provider === "gumroad") {
     return NextResponse.redirect("https://gumroad.com/library");
+  }
+
+  if (provider === "paddle") {
+    // Paddle manages cards via customer emails / dashboard for now.
+    return NextResponse.redirect(
+      new URL("/billing?portal=paddle_dashboard", appUrl)
+    );
   }
 
   const summary = await getBillingSummary(session.user.id, session.user.email);

@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { AuthProvider } from "@/components/auth-provider";
 import { AnalyticsPixels } from "@/components/analytics-pixels";
 import { CookieBanner } from "@/components/cookie-banner";
+import { PaddleProviderWithCustomer } from "@/components/paddle-provider-with-customer";
 import { BRAND_NAME, BRAND_TAGLINE, BRAND_SHORT } from "@/lib/brand";
 
 const manrope = Manrope({
@@ -70,9 +71,11 @@ export default function RootLayout({
     <html lang="en" className={cn("h-full", manrope.variable, fraunces.variable)}>
       <body className="min-h-full bg-white font-sans text-neutral-900">
         <AuthProvider>
-          <AnalyticsPixels />
-          {children}
-          <CookieBanner />
+          <PaddleProviderWithCustomer>
+            <AnalyticsPixels />
+            {children}
+            <CookieBanner />
+          </PaddleProviderWithCustomer>
         </AuthProvider>
       </body>
     </html>

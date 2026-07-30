@@ -9,8 +9,8 @@ import { CheckoutSuccessBeacon } from "@/components/checkout-success-beacon";
 import { AppHeader } from "@/components/app-header";
 
 export const metadata: Metadata = {
-  title: "Billing",
-  description: "Credits, subscription, and payment history for Memories Recap.",
+  title: "Moments & billing",
+  description: "Moments balance, quiet packs, and payment history for Memories Recap.",
 };
 
 function humanSubscription(
@@ -20,22 +20,22 @@ function humanSubscription(
   if (!sub) {
     return {
       title: "Pay as you go",
-      detail: `No monthly plan. You have ${summary.balance} credits ready to use.`,
+      detail: `No monthly plan. You have ${summary.balance} Moments ready to use.`,
     };
   }
   if (sub.status === "active" && sub.cancelAtPeriodEnd) {
     return {
-      title: "Pro monthly — ending soon",
-      detail: `Your plan stays active until ${
+      title: "Monthly plan — ending soon",
+      detail: `Stays active until ${
         sub.currentPeriodEnd
           ? new Date(sub.currentPeriodEnd).toLocaleDateString()
           : "period end"
-      }. You keep credits until then.`,
+      }. You keep Moments until then.`,
     };
   }
   if (sub.status === "active") {
     return {
-      title: "Pro monthly — active",
+      title: "Monthly plan — active",
       detail: `Renews ${
         sub.currentPeriodEnd
           ? new Date(sub.currentPeriodEnd).toLocaleDateString()
@@ -70,15 +70,15 @@ export default async function BillingPage({
 
       <section className="mt-10 space-y-6">
         <div>
-          <h1 className="text-2xl font-medium tracking-tight">Billing</h1>
+          <h1 className="text-2xl font-medium tracking-tight">Moments</h1>
           <p className="mt-2 text-neutral-500">
-            Plain-language view of your balance and plan.
+            Soft fuel for stories — earn freely, top up only when you want.
           </p>
         </div>
 
         {params.checkout === "success" ? (
           <p className="rounded-[16px] bg-green-50 px-4 py-3 text-sm text-green-800">
-            Payment received. Credits usually appear within a few seconds after
+            Payment received. Moments usually appear within a few seconds after
             webhook confirmation — we&apos;ll refresh the balance above when
             they land.
           </p>
@@ -91,28 +91,27 @@ export default async function BillingPage({
         ) : null}
 
         <div className="rounded-[16px] bg-neutral-50 p-5 shadow-sm">
-          <p className="text-sm text-neutral-500">Available credits</p>
+          <p className="text-sm text-neutral-500">Available Moments</p>
           <p className="mt-2 text-3xl font-medium">{summary.balance}</p>
           <p className="mt-2 text-sm text-neutral-500">
             {summary.balance === 0
-              ? "Buy a pack to process videos. About 1 credit ≈ 1 MB."
+              ? "Earn Moments or buy a quiet pack. About 1 Moment ≈ 1 MB."
               : `Enough for roughly ${summary.balance} MB of processing (min 10 per job).`}
           </p>
           <p className="mt-2 text-sm text-neutral-500">
-            Free starter grant:{" "}
+            Welcome gift:{" "}
             {summary.freeGranted
-              ? `already used (${FREE_CREDITS} credits)`
+              ? `received (${FREE_CREDITS} Moments)`
               : "available on first sign-in"}
           </p>
           {"dailyLoginAmount" in summary && summary.dailyLoginAmount ? (
             <p className="mt-2 text-sm text-neutral-500">
-              Occasional top-up when balance is low
+              Daily visit +{summary.dailyLoginAmount}
               {summary.dailyLoginGrantedToday ? " · credited today" : ""}.
             </p>
           ) : null}
           <p className="mt-2 text-sm text-neutral-500">
-            Pack credits expire in 90 days. Pro monthly grants last 365 days so
-            unused balance can roll into the next months honestly.
+            Pack Moments expire in 90 days. Monthly plan grants last 365 days.
           </p>
         </div>
 
@@ -124,7 +123,14 @@ export default async function BillingPage({
 
         <div className="grid gap-3">
           <Button asChild className="h-12 rounded-[16px] text-base">
-            <Link href="/pricing">Buy credits</Link>
+            <Link href="/moments">Ways to earn</Link>
+          </Button>
+          <Button
+            asChild
+            variant="secondary"
+            className="h-12 rounded-[16px] bg-white text-base shadow-sm"
+          >
+            <Link href="/pricing">Quiet packs</Link>
           </Button>
           <Button
             asChild
