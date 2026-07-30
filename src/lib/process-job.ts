@@ -1,4 +1,4 @@
-import { access, mkdtemp, readFile, rm } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm, createReadStream } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
@@ -808,32 +808,40 @@ export async function processJob(jobId: string, userId: string) {
       }
     }
 
-    const landscapeBytes = await readFile(landscapeLocal);
-    const verticalBytes = await readFile(verticalLocal);
-    const storyBytes = await readFile(storyLocal);
-    const tiktokBytes = await readFile(tiktokLocal);
-
-    const uploadsOut: Array<[string, Buffer]> = [
-      [landscapePath, landscapeBytes],
-      [verticalPath, verticalBytes],
-      [storyPath, storyBytes],
-      [tiktokPath, tiktokBytes],
+    const uploadsOut: Array<[string, string]> = [
+      [landscapePath, landscapeLocal],
+      [verticalPath, verticalLocal],
+      [storyPath, storyLocal],
+      [tiktokPath, tiktokLocal],
     ];
     if (highlightsLocal) {
-      uploadsOut.push([highlightsPath, await readFile(highlightsLocal)]);
+      uploadsOut.push([highlightsPath, highlightsLocal]);
     }
     let previewUploaded: string | null = null;
     if (await fileExists(previewLocal)) {
-      uploadsOut.push([previewPath, await readFile(previewLocal)]);
+      uploadsOut.push([previewPath, previewLocal]);
       previewUploaded = previewPath;
     }
-    for (const [path, bytes] of uploadsOut) {
-      const up = await supabase.storage.from("memories").upload(path, bytes, {
-        contentType: "video/mp4",
-        upsert: true,
-      });
-      if (up.error) throw new Error(up.error.message);
+
+    await updateJob(jobId, userId, {
+      progress: 80,
+      eta_seconds: 20,
+    });
+
+    for (const [path, localPath] of uploadsOut) {
+      const { data, error: uploadError } = await supabase.storage
+        .from("memories")
+        .upload(path, createReadStream(localPath), {
+          contentType: "video/mp4",
+          upsert: true,
+        });
+      if (uploadError) throw new Error(uploadError.message);
     }
+
+    await updateJob(jobId, userId, {
+      progress: 90,
+      eta_seconds: 10,
+    });
 
     const duration = await probeDuration(bin, landscapeLocal);
     const { RECAP_TTL_DAYS, RECAP_TTL_DAYS_PRO } = await import("@/lib/types");
