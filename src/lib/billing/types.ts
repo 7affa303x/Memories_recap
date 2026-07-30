@@ -3,7 +3,12 @@ export type CreditSource =
   | "subscription"
   | "pack"
   | "refund_restore"
-  | "daily_login";
+  | "daily_login"
+  | "reward_referral"
+  | "reward_family_share"
+  | "reward_first_recap"
+  | "reward_rating"
+  | "reward_streak";
 
 export type BillingSubscription = {
   id: string;
@@ -78,6 +83,8 @@ export type BillingState = {
 
 export type ProductKey =
   | "subscription"
+  | "subscription_ultra"
   | "credits_small"
   | "credits_medium"
-  | "credits_large";
+  | "credits_large"
+  | "credits_studio";

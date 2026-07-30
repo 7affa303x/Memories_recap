@@ -67,11 +67,108 @@
 
   html {
     @apply font-sans;
+    /* Visible scrollbar so long pages feel continuous */
+    scrollbar-width: thin;
+    scrollbar-color: #86efac #f3f4f6;
+  }
+
+  html::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+  }
+
+  html::-webkit-scrollbar-track {
+    background: #f3f4f6;
+  }
+
+  html::-webkit-scrollbar-thumb {
+    background: #86efac;
+    border-radius: 999px;
+    border: 3px solid #f3f4f6;
+  }
+
+  html::-webkit-scrollbar-thumb:hover {
+    background: #4ade80;
   }
 
   body {
     @apply bg-background text-foreground antialiased;
     font-size: 16px;
     line-height: 1.6;
+  }
+}
+
+@layer utilities {
+  .animate-fade-up {
+    animation: fade-up 0.45s ease-out both;
+  }
+  .animate-streak-pop {
+    animation: streak-pop 1.2s ease-out both;
+  }
+  .animate-streak-dot {
+    animation: streak-dot 0.7s ease-out both;
+  }
+  .animate-float-up {
+    animation: float-up 1.4s ease-out both;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .animate-fade-up,
+    .animate-streak-pop,
+    .animate-streak-dot,
+    .animate-float-up {
+      animation: none !important;
+    }
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes streak-pop {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.2;
+  }
+  60% {
+    transform: scale(1.15);
+    opacity: 0.35;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0.15;
+  }
+}
+
+@keyframes streak-dot {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.55);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes float-up {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-28px);
   }
 }

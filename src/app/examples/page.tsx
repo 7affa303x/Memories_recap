@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Logo } from "@/components/logo";
+import { AppHeader } from "@/components/app-header";
 import { Button } from "@/components/ui/button";
 import { BRAND_NAME } from "@/lib/brand";
 
@@ -14,14 +14,9 @@ export default function ExamplesPage() {
   return (
     <main className="min-h-full bg-[radial-gradient(1000px_520px_at_50%_-8%,#dcfce7,transparent),linear-gradient(180deg,#f8faf9_0%,#ffffff_42%,#f0fdf4_100%)]">
       <div className="mx-auto flex w-full max-w-lg flex-col px-6 pb-20 pt-8">
-        <header className="flex items-center justify-between">
-          <Logo />
-          <Link href="/pricing" className="min-h-11 px-2 text-sm text-neutral-500">
-            Pricing
-          </Link>
-        </header>
+        <AppHeader active="pricing" />
 
-        <section className="mt-10 space-y-4">
+        <section className="mt-8 space-y-4">
           <h1 className="font-display text-3xl font-semibold tracking-tight text-green-900">
             How a recap feels
           </h1>

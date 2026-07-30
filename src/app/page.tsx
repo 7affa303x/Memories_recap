@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
 import { getOptionalUser } from "@/lib/session";
-import { signOutAction } from "@/app/actions/auth";
 import { Button } from "@/components/ui/button";
 import { GoogleSignInButton } from "@/components/google-sign-in-button";
-import { Logo } from "@/components/logo";
+import { AppHeader } from "@/components/app-header";
 import { BRAND_NAME, BRAND_TAGLINE } from "@/lib/brand";
 import { welcomeLine } from "@/lib/greeting";
 
@@ -25,28 +24,9 @@ export default async function LandingPage({
   return (
     <main className="min-h-full bg-[radial-gradient(1000px_520px_at_50%_-8%,#dcfce7,transparent),linear-gradient(180deg,#f8faf9_0%,#ffffff_42%,#f0fdf4_100%)]">
       <div className="mx-auto flex w-full max-w-lg flex-col px-6 pb-20 pt-8">
-        <header className="flex items-center justify-between">
-          <Logo />
-          <div className="flex items-center gap-2">
-            <a href="/pricing" className="min-h-11 px-2 text-sm text-neutral-500">
-              Pricing
-            </a>
-            {user ? (
-              <>
-                <a href="/dashboard" className="min-h-11 px-2 text-sm text-neutral-500">
-                  Dashboard
-                </a>
-                <form action={signOutAction}>
-                  <button type="submit" className="min-h-11 px-2 text-sm text-neutral-500">
-                    Sign out
-                  </button>
-                </form>
-              </>
-            ) : null}
-          </div>
-        </header>
+        <AppHeader active={user ? "dashboard" : "pricing"} />
 
-        <section className="pt-10">
+        <section className="pt-8">
           {user ? (
             <p className="mb-3 text-sm font-medium text-green-800">
               {welcomeLine({ name: user.name })} Welcome back.
@@ -71,7 +51,10 @@ export default async function LandingPage({
             </p>
           ) : null}
 
-          <div className="mt-10">
+          <div className="mt-10 space-y-3">
+            <Button asChild variant="secondary" className="h-12 w-full rounded-[16px] text-base">
+              <a href="/journey">Enter cinematic journey</a>
+            </Button>
             {user ? (
               <Button asChild className="h-12 w-full rounded-[16px] text-base">
                 <a href="/upload">Upload memories</a>
