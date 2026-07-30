@@ -100,11 +100,12 @@ export default function RefundPage() {
             Payment provider
           </h2>
           <p>
-            Card payments are processed by the configured merchant of record
-            (for example Paddle, Gumroad, or Creem). Their checkout and dispute
-            rules may also apply. Where provider rules conflict with this page
-            on chargebacks or statutory rights, the stronger consumer protection
-            for your region wins.
+            Card payments may be processed by the configured merchant of record
+            (for example Paddle.com, Gumroad, or Creem). Where Paddle is MoR,
+            Paddle handles customer service and returns for those orders. Their
+            checkout and dispute rules may also apply. Where provider rules
+            conflict with this page on chargebacks or statutory rights, the
+            stronger consumer protection for your region wins.
           </p>
         </section>
 

@@ -28,7 +28,7 @@ export default async function SupportPage() {
           <h1 className="text-2xl font-medium tracking-tight">Support</h1>
           <p className="mt-2 text-neutral-500">
             We build for lasting customers. If a recap fails or looks wrong,
-            tell us — we restore credits on system failures.
+            tell us — we restore Moments on system failures.
           </p>
         </div>
 
