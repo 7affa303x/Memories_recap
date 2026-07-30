@@ -2,10 +2,13 @@
 
 const VIDEO_EXT = /\.(mp4|mov|m4v|webm|mkv|avi|3gp|mts|m2ts|hevc)$/i;
 
-export const MAX_FILES_PER_JOB = 12;
-/** Per-file ceiling — phone 4K clips routinely pass 800 MB */
-export const MAX_FILE_BYTES = 1536 * 1024 * 1024; // 1.5 GB
-export const MAX_BYTES_PER_JOB = 3 * 1024 * 1024 * 1024; // 3 GB
+export const MAX_FILES_PER_JOB = 8;
+/**
+ * Per-file ceiling — honest for serverless encode window.
+ * Larger files need the dedicated worker path (future).
+ */
+export const MAX_FILE_BYTES = 768 * 1024 * 1024; // 768 MB
+export const MAX_BYTES_PER_JOB = 1536 * 1024 * 1024; // 1.5 GB
 
 /**
  * Supabase Free plan global storage limit is 50 MB.
@@ -40,13 +43,13 @@ export function friendlyFileLimitMessage(kind: "file" | "total" | "count") {
     return `Take your time — up to ${MAX_FILES_PER_JOB} videos in one recap works best.`;
   }
   if (kind === "file") {
-    return "That one clip is a bit heavy for one file (max ~1.5 GB). Split it or compress a little — we’re still here for the rest.";
+    return "That one clip is a bit heavy for one file (max ~768 MB). Split it or compress a little — we’re still here for the rest.";
   }
-  return "This batch is over ~3 GB total. Remove one clip or split into two recaps — your memories are worth a clean render.";
+  return "This batch is over ~1.5 GB total. Remove one clip or split into two recaps — your memories are worth a clean render.";
 }
 
 export function formatLimitHint() {
-  return `Up to ${MAX_FILES_PER_JOB} videos · ~${Math.round(MAX_FILE_BYTES / (1024 * 1024))} MB each · ~${Math.round(MAX_BYTES_PER_JOB / (1024 * 1024 * 1024))} GB total`;
+  return `Up to ${MAX_FILES_PER_JOB} videos · ~${Math.round(MAX_FILE_BYTES / (1024 * 1024))} MB each · ~${(MAX_BYTES_PER_JOB / (1024 * 1024 * 1024)).toFixed(1)} GB total`;
 }
 
 /** Client-side batch validation before hitting the API. */

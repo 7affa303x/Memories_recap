@@ -136,10 +136,19 @@ export async function POST(request: Request, { params }: Params) {
     try {
       await updateJob(jobId, userId, {
         status: "analyzing",
-        stage: "analyzing",
+        stage: "ingesting",
         progress: 5,
       });
-      await processJob(jobId, userId);
+      const result = await processJob(jobId, userId);
+      if (result == null) {
+        // Deferred: lease/slot busy — keep credits reserved, stay queued for cron.
+        await updateJob(jobId, userId, {
+          status: "queued",
+          stage: "queued",
+          progress: 3,
+        }).catch(() => undefined);
+        return;
+      }
       await finalizeJobCredits({
         userId,
         email,

@@ -91,7 +91,15 @@ export async function POST(request: Request, { params }: Params) {
 
   after(async () => {
     try {
-      await processJob(jobId, userId);
+      const result = await processJob(jobId, userId);
+      if (result == null) {
+        await updateJob(jobId, userId, {
+          status: "queued",
+          stage: "queued",
+          progress: 3,
+        }).catch(() => undefined);
+        return;
+      }
       await finalizeJobCredits({
         userId,
         email,

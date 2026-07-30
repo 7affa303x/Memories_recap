@@ -618,22 +618,33 @@ export type ProcessingClaim = {
   jobId: string;
   userId: string;
   startedAt: string;
+  ownerId?: string;
+  heartbeatAt?: string;
+  attempt?: number;
 };
 
-/** Claim written when processJob starts so cron can find mid-process jobs. */
+/**
+ * Soft claim for cron discovery. Workers should use tryAcquireProcessingLease
+ * for exclusive ownership + heartbeat.
+ */
 export async function enqueueProcessingClaim(
   jobIdValue: string,
   userId: string
 ) {
-  await writeJson(`processing/${jobIdValue}.json`, {
+  const {
+    tryAcquireProcessingLease,
+    createOwnerId,
+  } = await import("@/lib/pipeline/lease");
+  await tryAcquireProcessingLease({
     jobId: jobIdValue,
     userId,
-    startedAt: new Date().toISOString(),
-  } satisfies ProcessingClaim);
+    ownerId: createOwnerId("legacy-claim"),
+  });
 }
 
 export async function clearProcessingClaim(jobIdValue: string) {
-  await removePath(`processing/${jobIdValue}.json`);
+  const { releaseProcessingLease } = await import("@/lib/pipeline/lease");
+  await releaseProcessingLease(jobIdValue);
 }
 
 export async function listProcessingClaims(limit = 50) {

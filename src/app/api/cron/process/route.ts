@@ -94,7 +94,7 @@ export async function GET(request: Request) {
         status: "failed",
         stage: "failed",
         progress: 100,
-        error: "Processing timed out (stuck recovery)",
+        error: "Processing timed out. Credits are back — try a smaller batch.",
         eta_seconds: 0,
       });
       await restoreCreditsIfPossible(
@@ -120,12 +120,21 @@ export async function GET(request: Request) {
           progress: 0,
           error: null,
         });
+        await clearProcessingClaim(claim.jobId).catch(() => undefined);
         await updateJob(claim.jobId, claim.userId, {
           status: "analyzing",
-          stage: "analyzing",
+          stage: "ingesting",
           progress: 5,
         });
-        await processJob(claim.jobId, claim.userId);
+        const result = await processJob(claim.jobId, claim.userId);
+        if (result == null) {
+          results.push({
+            jobId: claim.jobId,
+            ok: true,
+            action: "reprocess_deferred",
+          });
+          continue;
+        }
         await consumeCreditsIfPossible(
           claim.userId,
           job.notify_email,
@@ -153,7 +162,7 @@ export async function GET(request: Request) {
   }
 
   // Pick up stuck queued jobs
-  const queued = await listQueuedJobs(3);
+  const queued = await listQueuedJobs(8);
   for (const item of queued) {
     const job = await getJobForUser(item.jobId, item.userId);
     if (!job) {
@@ -175,7 +184,7 @@ export async function GET(request: Request) {
           status: "failed",
           stage: "failed",
           progress: 100,
-          error: "Processing timed out (stuck recovery)",
+          error: "Processing timed out. Credits are back — try a smaller batch.",
           eta_seconds: 0,
         });
         await restoreCreditsIfPossible(
@@ -194,10 +203,18 @@ export async function GET(request: Request) {
         try {
           await updateJob(item.jobId, item.userId, {
             status: "analyzing",
-            stage: "analyzing",
+            stage: "ingesting",
             progress: 5,
           });
-          await processJob(item.jobId, item.userId);
+          const result = await processJob(item.jobId, item.userId);
+          if (result == null) {
+            results.push({
+              jobId: item.jobId,
+              ok: true,
+              action: "reprocess_mid_deferred",
+            });
+            continue;
+          }
           await consumeCreditsIfPossible(
             item.userId,
             job.notify_email,
@@ -231,10 +248,18 @@ export async function GET(request: Request) {
     try {
       await updateJob(item.jobId, item.userId, {
         status: "analyzing",
-        stage: "analyzing",
+        stage: "ingesting",
         progress: 5,
       });
-      await processJob(item.jobId, item.userId);
+      const result = await processJob(item.jobId, item.userId);
+      if (result == null) {
+        results.push({
+          jobId: item.jobId,
+          ok: true,
+          action: "process_queued_deferred",
+        });
+        continue;
+      }
       await consumeCreditsIfPossible(item.userId, job.notify_email, item.jobId);
       results.push({ jobId: item.jobId, ok: true, action: "process_queued" });
     } catch (error) {
