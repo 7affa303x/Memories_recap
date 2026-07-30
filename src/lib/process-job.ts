@@ -71,6 +71,27 @@ async function fileExists(path: string) {
   }
 }
 
+let drawtextSupported: boolean | null = null;
+
+async function checkDrawtextSupport(bin: string): Promise<boolean> {
+  if (drawtextSupported !== null) return drawtextSupported;
+  try {
+    const child = spawn(bin, ["-filters"], { stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+    const code = await new Promise<number>((resolve) =>
+      child.on("close", resolve)
+    );
+    drawtextSupported = code === 0 && stdout.includes("drawtext");
+    return drawtextSupported;
+  } catch {
+    drawtextSupported = false;
+    return false;
+  }
+}
+
 async function makeEndCardClip(
   bin: string,
   orientation: "landscape" | "vertical",
@@ -92,16 +113,23 @@ async function makeEndCardClip(
       })
     );
   }
-  let vf = `scale=${dim}:force_original_aspect_ratio=decrease,pad=${dim}:(ow-iw)/2:(oh-ih)/2,format=yuv420p`;
-  if (font && lines.length > 0) {
+
+  const hasDrawtext = await checkDrawtextSupport(bin);
+  const baseVf = `scale=${dim}:force_original_aspect_ratio=decrease,pad=${dim}:(ow-iw)/2:(oh-ih)/2,format=yuv420p`;
+  let vf = baseVf;
+
+  if (hasDrawtext && font && lines.length > 0) {
     const escapedFont = font.replace(/\\/g, "/").replace(/:/g, "\\:");
     const escaped = lines
-      .map((l) => l.replace(/\\/g, "\\\\").replace(/:/g, "\\:").replace(/'/g, "\\'"))
+      .map((l) =>
+        l.replace(/\\/g, "\\\\").replace(/:/g, "\\:").replace(/'/g, "\\'")
+      )
       .join("\\n");
     const fontSize = Math.max(28, Math.round(size.w * 0.028));
     vf += `,drawtext=fontfile='${escapedFont}':text='${escaped}':fontsize=${fontSize}:fontcolor=white:borderw=2:bordercolor=black@0.35:x=(w-text_w)/2:y=h*0.78`;
   }
-  const args = [
+
+  const getArgs = (filter: string) => [
     "-y",
     "-loop",
     "1",
@@ -114,7 +142,7 @@ async function makeEndCardClip(
     "-t",
     String(END_CARD_SECONDS),
     "-vf",
-    vf,
+    filter,
     "-c:v",
     "libx264",
     "-preset",
@@ -130,13 +158,12 @@ async function makeEndCardClip(
   ];
 
   try {
-    await run(bin, args);
+    await run(bin, getArgs(vf));
   } catch (err) {
-    // If drawtext filter is missing, try again without it
+    // If it failed and we were using drawtext, try the fallback immediately
     if (vf.includes("drawtext")) {
-      const fallbackVf = `scale=${dim}:force_original_aspect_ratio=decrease,pad=${dim}:(ow-iw)/2:(oh-ih)/2,format=yuv420p`;
-      args[args.indexOf("-vf") + 1] = fallbackVf;
-      await run(bin, args);
+      logInfo("drawtext_failed_fallback", { outPath });
+      await run(bin, getArgs(baseVf));
     } else {
       throw err;
     }
@@ -195,9 +222,7 @@ export async function processJob(jobId: string, userId: string) {
 
   const endCardTitle =
     options.endCardTitle?.trim() || prefsEndTitle?.trim() || null;
-  const endCardShowDate = Boolean(
-    options.endCardShowDate ?? prefsShowDate
-  );
+  const endCardShowDate = Boolean(options.endCardShowDate ?? prefsShowDate);
   const hideEndCard = Boolean(isPro && (options.hideEndCard ?? prefsHideEnd));
 
   let outputQuality: OutputQuality =
@@ -239,11 +264,7 @@ export async function processJob(jobId: string, userId: string) {
       await downloadToFile(upload.storage_path, dest);
       const duration = await probeDuration(bin, dest);
       const size = await probeVideoSize(bin, dest);
-      maxSourceEdge = Math.max(
-        maxSourceEdge,
-        size.width || 0,
-        size.height || 0
-      );
+      maxSourceEdge = Math.max(maxSourceEdge, size.width || 0, size.height || 0);
       localFiles.push({ path: dest, duration });
       await updateJob(jobId, userId, {
         progress: 8 + Math.round(((index + 1) / uploads.length) * 18),
@@ -912,7 +933,7 @@ export async function processJob(jobId: string, userId: string) {
       logError("recap_email_failed", {
         jobId,
         error:
-          emailError instanceof Error ? emailError.message : "email_failed",
+          emailError instanceof Error ? error.message : "email_failed",
       });
     }
 
