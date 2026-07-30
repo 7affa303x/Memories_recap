@@ -9,10 +9,13 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "setup:creem": "node scripts/setup-creem.mjs"
+    "setup:creem": "node scripts/setup-creem.mjs",
+    "setup:paddle": "node scripts/setup-paddle-live.mjs"
   },
   "dependencies": {
     "@creem_io/nextjs": "^0.5.2",
+    "@paddle/paddle-js": "^1.6.4",
+    "@paddle/paddle-node-sdk": "^3.8.0",
     "@supabase/ssr": "^0.12.3",
     "@supabase/supabase-js": "^2.110.9",
     "@types/fluent-ffmpeg": "^2.1.28",

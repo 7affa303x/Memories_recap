@@ -17,7 +17,7 @@ Google sign-in only. Original videos stay untouched by default.
 - Auth.js (Google OAuth)
 - Supabase private Storage (`memories`, `app-data`, `recaps`)
 - Vercel Blob for large uploads (files above ~45 MB)
-- Billing: Gumroad primary merchant of record, Creem as fallback
+- Billing: Paddle live Merchant of Record (Gumroad/Creem remain as fallbacks)
 - FFmpeg + optional Gemini/Groq/OpenAI vision scoring
 - Vercel
 
@@ -30,13 +30,16 @@ https://memories-recap-one.vercel.app
 Pages:
 - `/pricing` — Free vs Pro, credit packs
 - `/billing` — current credits, renewal, portal
+- `/refund` — refund policy (Paddle verification)
 - `/account` — export data, receipt JSON, or delete account
 
 Webhooks:
+- `POST /api/webhooks/paddle` (when `BILLING_PROVIDER=paddle`)
 - `POST /api/webhooks/gumroad` (when `BILLING_PROVIDER=gumroad`)
 - `POST /api/webhooks/creem` (signed; Creem fallback)
 
-Set `BILLING_PROVIDER=gumroad` or `creem`. When unset, Gumroad is preferred if a token and permalink are present.
+Set `BILLING_PROVIDER=paddle` (live). Fallbacks: `gumroad` or `creem`.
+Catalog setup: `npm run setup:paddle` (requires `PADDLE_API_KEY`).
 
 Receipts: `GET /api/account/invoices` returns credit ledger / transaction history as downloadable JSON (partial invoice history).
 

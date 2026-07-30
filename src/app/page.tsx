@@ -213,6 +213,9 @@ export default async function LandingPage({
             <a href="/privacy" className="underline underline-offset-2">
               Privacy
             </a>
+            <a href="/refund" className="underline underline-offset-2">
+              Refunds
+            </a>
             <a href="/support" className="underline underline-offset-2">
               Support
             </a>

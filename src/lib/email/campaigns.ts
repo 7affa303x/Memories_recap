@@ -178,8 +178,8 @@ export async function runEmailCampaigns(limit = 40) {
               <div style="font-family:system-ui,sans-serif;line-height:1.5;color:#171717;max-width:560px">
                 <h1 style="font-size:22px;color:#166534">${BRAND_NAME}</h1>
                 <p>Hi ${name},</p>
-                <p>You’re low on credits. Top up a pack (or try Pro) to keep turning trips and celebrations into calm recaps — and unlock cleaner exports.</p>
-                <p><a href="${appUrl}/pricing" style="display:inline-block;background:#166534;color:#fff;padding:12px 18px;border-radius:12px;text-decoration:none;font-weight:600">See pricing</a></p>
+                <p>You’re low on Moments. Invite a friend, keep your streak, or top up a quiet pack when you’re ready — no rush.</p>
+                <p><a href="${appUrl}/moments" style="display:inline-block;background:#166534;color:#fff;padding:12px 18px;border-radius:12px;text-decoration:none;font-weight:600">Earn Moments</a></p>
               </div>`,
           });
           if (result.ok) {

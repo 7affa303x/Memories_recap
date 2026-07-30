@@ -16,6 +16,7 @@ export function ShareControls({ jobId, initialShareUrl = null }: Props) {
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [viewCount, setViewCount] = useState(0);
+  const [momentsNote, setMomentsNote] = useState<string | null>(null);
 
   useEffect(() => {
     fetch(`/api/jobs/${jobId}/share`, { cache: "no-store" })
@@ -44,9 +45,22 @@ export function ShareControls({ jobId, initialShareUrl = null }: Props) {
           audience,
         }),
       });
-      const data = (await res.json()) as { url?: string; error?: string };
+      const data = (await res.json()) as {
+        url?: string;
+        error?: string;
+        momentsGranted?: number;
+      };
       if (!res.ok || !data.url) throw new Error(data.error || "Could not create share link");
       setUrl(data.url);
+      if (data.momentsGranted && data.momentsGranted > 0) {
+        setError(null);
+        setCopied(false);
+        // reuse error slot as soft success note
+        setTimeout(() => {
+          /* visual handled below via momentsNote */
+        }, 0);
+        setMomentsNote(`+${data.momentsGranted} Moments for family share`);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Share failed");
     } finally {
@@ -171,6 +185,11 @@ export function ShareControls({ jobId, initialShareUrl = null }: Props) {
         </div>
       ) : null}
 
+      {momentsNote ? (
+        <p className="animate-float-up text-sm font-medium text-green-700">
+          {momentsNote}
+        </p>
+      ) : null}
       {error ? <p className="text-sm text-red-700">{error}</p> : null}
     </div>
   );

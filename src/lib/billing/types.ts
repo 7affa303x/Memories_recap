@@ -3,7 +3,12 @@ export type CreditSource =
   | "subscription"
   | "pack"
   | "refund_restore"
-  | "daily_login";
+  | "daily_login"
+  | "reward_referral"
+  | "reward_family_share"
+  | "reward_first_recap"
+  | "reward_rating"
+  | "reward_streak";
 
 export type BillingSubscription = {
   id: string;
@@ -52,8 +57,8 @@ export type BillingState = {
   email: string;
   creemCustomerId: string | null;
   /**
-   * @deprecated Compat only — older Storage JSON may still carry Polar/Paddle ids.
-   * Live MoR is Gumroad (primary) or Creem (fallback). Do not treat as active providers.
+   * Paddle customer id (ctm_...) when BILLING_PROVIDER=paddle.
+   * Also may appear in legacy Storage JSON from earlier Paddle experiments.
    */
   paddleCustomerId?: string | null;
   polarCustomerId?: string | null;

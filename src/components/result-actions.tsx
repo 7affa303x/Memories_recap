@@ -125,6 +125,7 @@ export function RecapRating({
   const [rating, setRating] = useState<number | null>(initialRating ?? null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [momentsNote, setMomentsNote] = useState<string | null>(null);
 
   async function submit(value: number) {
     setSaving(true);
@@ -138,6 +139,9 @@ export function RecapRating({
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error || "Could not save rating");
+      if (json.momentsGranted) {
+        setMomentsNote(`+${json.momentsGranted} Moments — thank you`);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save rating");
     } finally {
@@ -147,9 +151,9 @@ export function RecapRating({
 
   return (
     <div className="rounded-[16px] bg-neutral-50 p-4 shadow-sm">
-      <p className="text-sm font-medium">How was this recap?</p>
+      <p className="text-sm font-medium">How did this feel?</p>
       <p className="mt-1 text-xs text-neutral-500">
-        Optional 1–5 after you watch.
+        Optional 1–5 — earns Moments the first time.
       </p>
       <div className="mt-3 flex gap-2">
         {[1, 2, 3, 4, 5].map((n) => (
@@ -158,7 +162,7 @@ export function RecapRating({
             type="button"
             disabled={saving}
             onClick={() => void submit(n)}
-            className={`min-h-11 min-w-11 rounded-xl text-sm font-medium ${
+            className={`pressable min-h-11 min-w-11 rounded-xl text-sm font-medium ${
               rating === n
                 ? "bg-neutral-900 text-white"
                 : "bg-white text-neutral-700"
@@ -169,7 +173,12 @@ export function RecapRating({
           </button>
         ))}
       </div>
-      {rating ? (
+      {momentsNote ? (
+        <p className="mt-2 animate-float-up text-xs font-medium text-green-700">
+          {momentsNote}
+        </p>
+      ) : null}
+      {rating && !momentsNote ? (
         <p className="mt-2 text-xs text-neutral-500">
           Thanks — you rated this {rating}/5.
         </p>

@@ -4,7 +4,7 @@
  * | Flag | Env | Default | Notes |
  * |------|-----|---------|-------|
  * | SHARE_AUTO | SHARE_AUTO | false | Auto public share on recap complete |
- * | REFERRALS_ENABLED | REFERRALS_ENABLED | false | Invite UI + GET /api/referrals (?ref=userId). Credit rewards not wired. |
+ * | REFERRALS_ENABLED | REFERRALS_ENABLED | true | Invite + Moments rewards (+200 / +50) |
  * | MUSIC_PAID_ENABLED | MUSIC_PAID_ENABLED | false | Paid music library lane |
  * | MARKETING_EXPERIMENTS | MARKETING_EXPERIMENTS | false | Soft marketing A/B |
  * | WAITLIST_ENABLED | WAITLIST_ENABLED | false | Waitlist / early-access forms |
@@ -27,7 +27,8 @@ export const SHARE_AUTO = boolEnv("SHARE_AUTO", false);
  * When true: account page shows invite link (`?ref=userId`) and GET /api/referrals returns the code.
  * When false: /api/referrals responds 501. Credit rewards are not granted yet.
  */
-export const REFERRALS_ENABLED = boolEnv("REFERRALS_ENABLED", false);
+/** Referral / invite Moments — on by default for engagement. */
+export const REFERRALS_ENABLED = boolEnv("REFERRALS_ENABLED", true);
 
 /** Paid music library lane (also gated in music.ts). */
 export const MUSIC_PAID_ENABLED = boolEnv("MUSIC_PAID_ENABLED", false);

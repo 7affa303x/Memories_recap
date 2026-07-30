@@ -28,7 +28,30 @@ export default function TermsPage() {
           <p>
             Memories Recap / operator to be updated upon LLC formation. Until
             then, these terms describe the service operated at memoriesrecap.app
-            and related deployments.
+            and related deployments (including memories-recap-one.vercel.app).
+          </p>
+        </section>
+
+        <section className="space-y-2">
+          <h2 className="text-lg font-medium text-neutral-900">
+            Payments &amp; Merchant of Record
+          </h2>
+          <p>
+            When you buy Moments packs or Pro through Paddle Checkout, our order
+            process is conducted by our online reseller Paddle.com. Paddle.com
+            is the Merchant of Record for those orders. Paddle provides customer
+            service inquiries and handles returns for purchases made through
+            them. You can contact Paddle at{" "}
+            <a
+              className="text-green-700 underline"
+              href="https://paddle.net"
+              target="_blank"
+              rel="noreferrer"
+            >
+              paddle.net
+            </a>
+            . Other payment providers may apply for older or alternate
+            checkouts; their terms apply to those transactions.
           </p>
         </section>
 
@@ -109,11 +132,14 @@ export default function TermsPage() {
         <section className="space-y-2">
           <h2 className="text-lg font-medium text-neutral-900">Refunds</h2>
           <p>
-            Digital goods (credit packs and subscriptions) follow the refund
-            policy of the payment provider configured as merchant of record
-            (Gumroad and/or Creem). If a job fails because of a system error on
-            our side, reserved credits are restored automatically — that is the
-            primary remedy for failed processing.
+            Digital goods (Moments packs and subscriptions) follow our{" "}
+            <Link href="/refund" className="text-green-700 underline">
+              Refund Policy
+            </Link>{" "}
+            and the rules of the payment provider configured as merchant of
+            record. If a job fails because of a system error on our side,
+            reserved Moments are restored automatically — that is the primary
+            remedy for failed processing.
           </p>
         </section>
 

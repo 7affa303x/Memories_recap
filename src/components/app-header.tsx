@@ -24,7 +24,10 @@ export async function AppHeader({
         Recaps
       </Link>
       <Link href="/billing" className={linkClass("billing")}>
-        Credits
+        Moments
+      </Link>
+      <Link href="/moments" className="min-h-11 px-2 text-sm text-neutral-500">
+        Earn
       </Link>
       <Link href="/account" className={linkClass("account")}>
         Account
