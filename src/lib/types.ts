@@ -125,7 +125,9 @@ export type ShareIndex = {
 
 export const STAGE_LABELS: Record<string, string> = {
   analyzing: "Analyzing scenes",
+  ingesting: "Preparing your videos",
   selecting: "Choosing best moments",
+  timeline_ready: "Timeline ready",
   building: "Building your recap",
   rendering: "Rendering landscape & vertical",
   uploading: "Uploading memories",
@@ -134,6 +136,7 @@ export const STAGE_LABELS: Record<string, string> = {
   completed: "Done",
   failed: "Something went wrong",
   cancelled: "Cancelled",
+  retrying: "Retrying",
 };
 
 export {

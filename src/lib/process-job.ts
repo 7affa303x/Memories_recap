@@ -1,4 +1,4 @@
-import { access, mkdtemp, readFile, rm } from "node:fs/promises";
+import { access, mkdtemp, rm } from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,9 +8,7 @@ import { getServiceSupabase, signedRecapUrl } from "@/lib/supabase/admin";
 import { downloadSourceToFile } from "@/lib/source-download";
 import {
   appendJobLog,
-  clearProcessingClaim,
   dequeueJob,
-  enqueueProcessingClaim,
   getJobForUser,
   listUploads,
   updateJob,
@@ -27,7 +25,6 @@ import {
   END_CARD_SECONDS,
   endCardImagePath,
   renderSizes,
-  resolveBundledFont,
   watermarkOverlayFilter,
   watermarkOverlayPath,
   type OutputQuality,
@@ -42,6 +39,22 @@ import { getBillingSummary } from "@/lib/billing/credits";
 import { getUserPrefs } from "@/lib/user-prefs";
 import { logError, logInfo } from "@/lib/logger";
 import type { RecapOptions } from "@/lib/types";
+import { PIPELINE_ARTIFACTS, RENDER_EXTRA_DERIVATIVES } from "@/lib/flags";
+import {
+  createOwnerId,
+  ensurePipelineState,
+  heartbeatProcessingLease,
+  releaseEncodeSlot,
+  releaseProcessingLease,
+  setPipelineStage,
+  toFriendlyProcessError,
+  touchEncodeSlot,
+  tryAcquireEncodeSlot,
+  tryAcquireProcessingLease,
+  writeArtifact,
+  SCORING_CONFIG,
+  type TimelineArtifact,
+} from "@/lib/pipeline";
 
 function run(bin: string, args: string[]) {
   return new Promise<void>((resolve, reject) => {
@@ -71,65 +84,20 @@ async function fileExists(path: string) {
   }
 }
 
-let drawtextSupported: boolean | null = null;
-
-async function checkDrawtextSupport(bin: string): Promise<boolean> {
-  if (drawtextSupported !== null) return drawtextSupported;
-  try {
-    const child = spawn(bin, ["-filters"], { stdio: ["ignore", "pipe", "pipe"] });
-    let stdout = "";
-    child.stdout.on("data", (chunk) => {
-      stdout += chunk.toString();
-    });
-    const code = await new Promise<number>((resolve) =>
-      child.on("close", resolve)
-    );
-    drawtextSupported = code === 0 && stdout.includes("drawtext");
-    return drawtextSupported;
-  } catch {
-    drawtextSupported = false;
-    return false;
-  }
-}
-
+/**
+ * Brand end-card only — no drawtext (ffmpeg-static often lacks libfreetype).
+ * Title/date stay on the timeline artifact for a future PNG overlay path.
+ */
 async function makeEndCardClip(
   bin: string,
   orientation: "landscape" | "vertical",
   outPath: string,
-  size: { w: number; h: number },
-  opts?: { title?: string | null; showDate?: boolean }
+  size: { w: number; h: number }
 ) {
   const image = endCardImagePath(orientation);
   const dim = `${size.w}:${size.h}`;
-  const font = resolveBundledFont();
-  const lines: string[] = [];
-  if (opts?.title?.trim()) lines.push(opts.title.trim().slice(0, 48));
-  if (opts?.showDate) {
-    lines.push(
-      new Date().toLocaleDateString(undefined, {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      })
-    );
-  }
-
-  const hasDrawtext = await checkDrawtextSupport(bin);
-  const baseVf = `scale=${dim}:force_original_aspect_ratio=decrease,pad=${dim}:(ow-iw)/2:(oh-ih)/2,format=yuv420p`;
-  let vf = baseVf;
-
-  if (hasDrawtext && font && lines.length > 0) {
-    const escapedFont = font.replace(/\\/g, "/").replace(/:/g, "\\:");
-    const escaped = lines
-      .map((l) =>
-        l.replace(/\\/g, "\\\\").replace(/:/g, "\\:").replace(/'/g, "\\'")
-      )
-      .join("\\n");
-    const fontSize = Math.max(28, Math.round(size.w * 0.028));
-    vf += `,drawtext=fontfile='${escapedFont}':text='${escaped}':fontsize=${fontSize}:fontcolor=white:borderw=2:bordercolor=black@0.35:x=(w-text_w)/2:y=h*0.78`;
-  }
-
-  const getArgs = (filter: string) => [
+  const vf = `scale=${dim}:force_original_aspect_ratio=decrease,pad=${dim}:(ow-iw)/2:(oh-ih)/2,format=yuv420p`;
+  await run(bin, [
     "-y",
     "-loop",
     "1",
@@ -142,7 +110,7 @@ async function makeEndCardClip(
     "-t",
     String(END_CARD_SECONDS),
     "-vf",
-    filter,
+    vf,
     "-c:v",
     "libx264",
     "-preset",
@@ -155,19 +123,7 @@ async function makeEndCardClip(
     "-movflags",
     "+faststart",
     outPath,
-  ];
-
-  try {
-    await run(bin, getArgs(vf));
-  } catch (err) {
-    // If it failed and we were using drawtext, try the fallback immediately
-    if (vf.includes("drawtext")) {
-      logInfo("drawtext_failed_fallback", { outPath });
-      await run(bin, getArgs(baseVf));
-    } else {
-      throw err;
-    }
-  }
+  ]);
 }
 
 export async function processJob(jobId: string, userId: string) {
@@ -175,9 +131,42 @@ export async function processJob(jobId: string, userId: string) {
   if (!bin) throw new Error("ffmpeg binary missing");
 
   const started = Date.now();
-  await enqueueProcessingClaim(jobId, userId).catch(() => undefined);
-  await appendJobLog(userId, jobId, "process_start");
-  logInfo("process_start", { jobId, userId });
+  const ownerId = createOwnerId("encode");
+
+  const slot = await tryAcquireEncodeSlot({ ownerId, jobId, userId });
+  if (!slot.ok) {
+    logInfo("encode_slot_deferred", { jobId, userId, reason: slot.reason });
+    await updateJob(jobId, userId, {
+      status: "queued",
+      stage: "queued",
+      progress: 3,
+      error: null,
+      eta_seconds: 90,
+    }).catch(() => undefined);
+    // Leave queue entry; cron will retry when a slot frees.
+    return null;
+  }
+
+  const lease = await tryAcquireProcessingLease({ jobId, userId, ownerId });
+  if (!lease.ok) {
+    await releaseEncodeSlot(ownerId).catch(() => undefined);
+    logInfo("lease_deferred", { jobId, userId, reason: lease.reason });
+    return null;
+  }
+
+  const heartbeat = setInterval(() => {
+    void heartbeatProcessingLease(jobId, ownerId).catch(() => undefined);
+    void touchEncodeSlot(ownerId).catch(() => undefined);
+  }, 30_000);
+
+  await appendJobLog(userId, jobId, "process_start", { ownerId });
+  logInfo("process_start", { jobId, userId, ownerId });
+  if (PIPELINE_ARTIFACTS) {
+    await ensurePipelineState(userId, jobId, lease.lease.attempt).catch(
+      () => undefined
+    );
+    await setPipelineStage(userId, jobId, "ingesting").catch(() => undefined);
+  }
 
   const job = await getJobForUser(jobId, userId);
   const options: RecapOptions = job?.recap_options ?? {
@@ -235,13 +224,15 @@ export async function processJob(jobId: string, userId: string) {
 
   const uploads = await listUploads(jobId, userId);
   if (uploads.length === 0) {
+    clearInterval(heartbeat);
     await updateJob(jobId, userId, {
       status: "failed",
       stage: "failed",
       progress: 100,
-      error: "No videos uploaded",
+      error: toFriendlyProcessError("No videos uploaded").userMessage,
     });
-    await clearProcessingClaim(jobId).catch(() => undefined);
+    await releaseProcessingLease(jobId, ownerId).catch(() => undefined);
+    await releaseEncodeSlot(ownerId).catch(() => undefined);
     throw new Error("No videos uploaded");
   }
 
@@ -251,13 +242,14 @@ export async function processJob(jobId: string, userId: string) {
   try {
     await updateJob(jobId, userId, {
       status: "analyzing",
-      stage: "analyzing",
+      stage: "ingesting",
       progress: 8,
       eta_seconds: 120,
       error: null,
     });
 
-    const localFiles: { path: string; duration: number }[] = [];
+    const localFiles: { path: string; duration: number; uploadId: string }[] =
+      [];
     let maxSourceEdge = 0;
     for (const [index, upload] of uploads.entries()) {
       const dest = join(workDir, `src-${index}.mp4`);
@@ -265,7 +257,26 @@ export async function processJob(jobId: string, userId: string) {
       const duration = await probeDuration(bin, dest);
       const size = await probeVideoSize(bin, dest);
       maxSourceEdge = Math.max(maxSourceEdge, size.width || 0, size.height || 0);
-      localFiles.push({ path: dest, duration });
+      localFiles.push({ path: dest, duration, uploadId: upload.id });
+      if (PIPELINE_ARTIFACTS) {
+        await writeArtifact({
+          userId,
+          jobId,
+          kind: "media_probe",
+          name: `probe-${upload.id}.json`,
+          uploadId: upload.id,
+          data: {
+            version: 1 as const,
+            upload_id: upload.id,
+            file_name: upload.file_name,
+            storage_path: upload.storage_path,
+            duration_seconds: duration,
+            width: size.width,
+            height: size.height,
+            work_name: `src-${index}.mp4`,
+          },
+        }).catch(() => undefined);
+      }
       await updateJob(jobId, userId, {
         progress: 8 + Math.round(((index + 1) / uploads.length) * 18),
         eta_seconds: Math.max(40, 120 - index * 8),
@@ -299,6 +310,9 @@ export async function processJob(jobId: string, userId: string) {
       progress: 30,
       eta_seconds: 90,
     });
+    if (PIPELINE_ARTIFACTS) {
+      await setPipelineStage(userId, jobId, "selecting").catch(() => undefined);
+    }
 
     const picks = await selectBestClips({
       bin,
@@ -315,6 +329,74 @@ export async function processJob(jobId: string, userId: string) {
       trackId: track?.id ?? null,
     });
 
+    if (PIPELINE_ARTIFACTS) {
+      const scored = picks.map((pick) => {
+        const source_index = localFiles.findIndex(
+          (f) => f.path === pick.sourcePath
+        );
+        const upload_id =
+          source_index >= 0
+            ? localFiles[source_index]!.uploadId
+            : uploads[0]?.id || "";
+        return {
+          upload_id,
+          source_index: Math.max(0, source_index),
+          start: pick.start,
+          duration: pick.duration,
+          local_score: pick.score,
+          ai_score: null,
+          ai_provider: null,
+          final_score: pick.score,
+          reason: "heuristic+vision_rank",
+        };
+      });
+      await writeArtifact({
+        userId,
+        jobId,
+        kind: "scores",
+        name: "scores.json",
+        data: {
+          version: 1 as const,
+          scored,
+          scoring_config: { ...SCORING_CONFIG },
+        },
+      }).catch(() => undefined);
+
+      const timeline: TimelineArtifact = {
+        version: 1,
+        segments: scored.map((s) => ({
+          upload_id: s.upload_id,
+          source_index: s.source_index,
+          start: s.start,
+          duration: s.duration,
+          score: s.final_score,
+          reason: s.reason,
+        })),
+        mood: mood.id,
+        music_track_id: track?.id ?? null,
+        music_mode: musicMode,
+        outputs: ["landscape", "vertical"],
+        end_card: {
+          hide: hideEndCard,
+          title: endCardTitle,
+          show_date: endCardShowDate,
+        },
+      };
+      await writeArtifact({
+        userId,
+        jobId,
+        kind: "timeline",
+        name: "timeline.json",
+        data: timeline,
+      }).catch(() => undefined);
+      await setPipelineStage(userId, jobId, "timeline_ready").catch(
+        () => undefined
+      );
+      await updateJob(jobId, userId, {
+        stage: "timeline_ready",
+        progress: 36,
+      }).catch(() => undefined);
+    }
     for (const [index, pick] of picks.entries()) {
       const clip = join(workDir, `clip-${index}.mp4`);
       let keepAudio = false;
@@ -471,14 +553,12 @@ export async function processJob(jobId: string, userId: string) {
     const endLandscape = join(workDir, "end-landscape.mp4");
     const endVertical = join(workDir, "end-vertical.mp4");
     if (!hideEndCard) {
-      await makeEndCardClip(bin, "landscape", endLandscape, sizes.landscape, {
-        title: endCardTitle,
-        showDate: endCardShowDate,
-      });
-      await makeEndCardClip(bin, "vertical", endVertical, sizes.vertical, {
-        title: endCardTitle,
-        showDate: endCardShowDate,
-      });
+      await makeEndCardClip(bin, "landscape", endLandscape, sizes.landscape);
+      await makeEndCardClip(bin, "vertical", endVertical, sizes.vertical);
+    }
+
+    if (PIPELINE_ARTIFACTS) {
+      await setPipelineStage(userId, jobId, "rendering").catch(() => undefined);
     }
 
     const landscapeBody = join(workDir, "landscape-body.mp4");
@@ -676,7 +756,8 @@ export async function processJob(jobId: string, userId: string) {
     const tiktokPath = `outputs/${userId}/${jobId}/v${generation}/tiktok.mp4`;
     const previewPath = `outputs/${userId}/${jobId}/v${generation}/preview-6s.mp4`;
 
-    // Platform-oriented vertical copies (safe margins for Stories / TikTok)
+    // Cheap 6s preview always. Extra story/tiktok/highlights are opt-in
+    // (RENDER_EXTRA_DERIVATIVES) — they dominate serverless timeouts.
     const storyLocal = join(workDir, "story.mp4");
     const tiktokLocal = join(workDir, "tiktok.mp4");
     const previewLocal = join(workDir, "preview-6s.mp4");
@@ -699,47 +780,50 @@ export async function processJob(jobId: string, userId: string) {
       "+faststart",
       previewLocal,
     ]).catch(() => undefined);
-    await run(bin, [
-      "-y",
-      "-i",
-      verticalLocal,
-      "-vf",
-      "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,format=yuv420p",
-      "-c:v",
-      "libx264",
-      "-preset",
-      "veryfast",
-      "-crf",
-      "23",
-      "-c:a",
-      "aac",
-      "-movflags",
-      "+faststart",
-      storyLocal,
-    ]);
-    await run(bin, [
-      "-y",
-      "-i",
-      verticalLocal,
-      "-vf",
-      "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,format=yuv420p",
-      "-c:v",
-      "libx264",
-      "-preset",
-      "veryfast",
-      "-crf",
-      "22",
-      "-c:a",
-      "aac",
-      "-movflags",
-      "+faststart",
-      tiktokLocal,
-    ]);
 
-    // Pro highlights: concat highest-score clips totaling ~40% duration
-    // (not a naive trim of the first 40% of the full timeline).
+    const wantExtras = RENDER_EXTRA_DERIVATIVES;
+    if (wantExtras) {
+      await run(bin, [
+        "-y",
+        "-i",
+        verticalLocal,
+        "-vf",
+        "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,format=yuv420p",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-crf",
+        "23",
+        "-c:a",
+        "aac",
+        "-movflags",
+        "+faststart",
+        storyLocal,
+      ]);
+      await run(bin, [
+        "-y",
+        "-i",
+        verticalLocal,
+        "-vf",
+        "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,format=yuv420p",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-crf",
+        "22",
+        "-c:a",
+        "aac",
+        "-movflags",
+        "+faststart",
+        tiktokLocal,
+      ]);
+    }
+
+    // Pro highlights only when extra derivatives enabled
     let highlightsLocal: string | null = null;
-    if (isPro) {
+    if (isPro && wantExtras) {
       highlightsLocal = join(workDir, "highlights.mp4");
       const builtFromPicks =
         picks.length > 0 &&
@@ -755,7 +839,6 @@ export async function processJob(jobId: string, userId: string) {
             }))
             .sort((a, b) => b.pick.score - a.pick.score);
 
-          // Prefer duration budget; fall back to top half by score count.
           const chosen: typeof ranked = [];
           let acc = 0;
           for (const item of ranked) {
@@ -768,7 +851,6 @@ export async function processJob(jobId: string, userId: string) {
             chosen.push(...ranked.slice(0, half));
           }
 
-          // Keep original timeline order for a natural watch
           chosen.sort((a, b) => a.index - b.index);
           const hlList = join(workDir, "highlights-concat.txt");
           await writeConcatList(
@@ -805,7 +887,6 @@ export async function processJob(jobId: string, userId: string) {
             ]);
             return true;
           } catch {
-            // Fall through to landscape trim fallback
             return false;
           }
         })());
@@ -846,9 +927,10 @@ export async function processJob(jobId: string, userId: string) {
     const uploadsOut: Array<[string, string]> = [
       [landscapePath, landscapeLocal],
       [verticalPath, verticalLocal],
-      [storyPath, storyLocal],
-      [tiktokPath, tiktokLocal],
     ];
+    if (wantExtras) {
+      uploadsOut.push([storyPath, storyLocal], [tiktokPath, tiktokLocal]);
+    }
     if (highlightsLocal) {
       uploadsOut.push([highlightsPath, highlightsLocal]);
     }
@@ -886,8 +968,8 @@ export async function processJob(jobId: string, userId: string) {
       landscapePath,
       verticalPath,
       highlightsPath: highlightsLocal ? highlightsPath : null,
-      storyPath,
-      tiktokPath,
+      storyPath: wantExtras ? storyPath : null,
+      tiktokPath: wantExtras ? tiktokPath : null,
       previewPath: previewUploaded,
       durationSeconds: duration,
       mood: mood.id,
@@ -896,6 +978,24 @@ export async function processJob(jobId: string, userId: string) {
     });
 
     // Share links are opt-in from the result page (ShareControls), not auto-created.
+
+    if (PIPELINE_ARTIFACTS) {
+      await writeArtifact({
+        userId,
+        jobId,
+        kind: "render_manifest",
+        name: "render-manifest.json",
+        data: {
+          version: 1 as const,
+          generation,
+          landscape_path: landscapePath,
+          vertical_path: verticalPath,
+          preview_path: previewUploaded,
+          duration_seconds: duration,
+        },
+      }).catch(() => undefined);
+      await setPipelineStage(userId, jobId, "completed").catch(() => undefined);
+    }
 
     await updateJob(jobId, userId, {
       status: "completed",
@@ -916,6 +1016,7 @@ export async function processJob(jobId: string, userId: string) {
       mood: mood.id,
       music: track?.id ?? null,
       outputQuality,
+      extras: wantExtras,
     });
     logInfo("process_completed", { jobId, userId, ms: Date.now() - started });
 
@@ -933,7 +1034,7 @@ export async function processJob(jobId: string, userId: string) {
       logError("recap_email_failed", {
         jobId,
         error:
-          emailError instanceof Error ? error.message : "email_failed",
+          emailError instanceof Error ? emailError.message : "email_failed",
       });
     }
 
@@ -942,20 +1043,36 @@ export async function processJob(jobId: string, userId: string) {
       verticalUrl: await signedRecapUrl(verticalPath),
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Processing failed";
-    logError("process_failed", { jobId, userId, message });
-    await appendJobLog(userId, jobId, "process_failed", { message });
+    const friendly = toFriendlyProcessError(error);
+    const raw = error instanceof Error ? error.message : "Processing failed";
+    logError("process_failed", {
+      jobId,
+      userId,
+      code: friendly.code,
+      message: raw,
+    });
+    await appendJobLog(userId, jobId, "process_failed", {
+      code: friendly.code,
+      message: raw.slice(0, 500),
+    });
+    if (PIPELINE_ARTIFACTS) {
+      await setPipelineStage(userId, jobId, "failed", {
+        failed_stage: friendly.code,
+      }).catch(() => undefined);
+    }
     await updateJob(jobId, userId, {
       status: "failed",
       stage: "failed",
       progress: 100,
-      error: message,
+      error: friendly.userMessage,
       eta_seconds: 0,
     });
     await dequeueJob(jobId).catch(() => undefined);
     throw error;
   } finally {
-    await clearProcessingClaim(jobId).catch(() => undefined);
+    clearInterval(heartbeat);
+    await releaseProcessingLease(jobId, ownerId).catch(() => undefined);
+    await releaseEncodeSlot(ownerId).catch(() => undefined);
     await rm(workDir, { recursive: true, force: true }).catch(() => undefined);
   }
 }

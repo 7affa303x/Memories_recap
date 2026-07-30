@@ -1,13 +1,15 @@
 /**
- * Simple env feature flags. Defaults keep launch-safe behavior off until enabled.
+ * Feature flags. Defaults keep launch-safe / pipeline-safe behavior.
  *
  * | Flag | Env | Default | Notes |
  * |------|-----|---------|-------|
  * | SHARE_AUTO | SHARE_AUTO | false | Auto public share on recap complete |
- * | REFERRALS_ENABLED | REFERRALS_ENABLED | false | Invite UI + GET /api/referrals (?ref=userId). Credit rewards not wired. |
+ * | REFERRALS_ENABLED | REFERRALS_ENABLED | false | Invite UI + referrals API |
  * | MUSIC_PAID_ENABLED | MUSIC_PAID_ENABLED | false | Paid music library lane |
  * | MARKETING_EXPERIMENTS | MARKETING_EXPERIMENTS | false | Soft marketing A/B |
- * | WAITLIST_ENABLED | WAITLIST_ENABLED | false | Waitlist / early-access forms |
+ * | WAITLIST_ENABLED | WAITLIST_ENABLED | false | Waitlist forms |
+ * | RENDER_EXTRA_DERIVATIVES | RENDER_EXTRA_DERIVATIVES | false | story/tiktok/highlights encodes |
+ * | PIPELINE_ARTIFACTS | PIPELINE_ARTIFACTS | true | Persist stage artifacts under app-data |
  */
 
 function boolEnv(name: string, fallback = false) {
@@ -19,24 +21,23 @@ function boolEnv(name: string, fallback = false) {
   return fallback;
 }
 
-/** Auto-create a public share link when a recap completes. */
 export const SHARE_AUTO = boolEnv("SHARE_AUTO", false);
+export const REFERRALS_ENABLED = boolEnv("REFERRALS_ENABLED", false);
+export const MUSIC_PAID_ENABLED = boolEnv("MUSIC_PAID_ENABLED", false);
+export const MARKETING_EXPERIMENTS = boolEnv("MARKETING_EXPERIMENTS", false);
+export const WAITLIST_ENABLED = boolEnv("WAITLIST_ENABLED", false);
 
 /**
- * Referral / invite scaffold.
- * When true: account page shows invite link (`?ref=userId`) and GET /api/referrals returns the code.
- * When false: /api/referrals responds 501. Credit rewards are not granted yet.
+ * When false (default): only landscape + vertical (+ cheap 6s preview).
+ * Extra story/tiktok/highlights encodes are the main timeout amplifiers.
  */
-export const REFERRALS_ENABLED = boolEnv("REFERRALS_ENABLED", false);
+export const RENDER_EXTRA_DERIVATIVES = boolEnv(
+  "RENDER_EXTRA_DERIVATIVES",
+  false
+);
 
-/** Paid music library lane (also gated in music.ts). */
-export const MUSIC_PAID_ENABLED = boolEnv("MUSIC_PAID_ENABLED", false);
-
-/** Soft marketing experiments (homepage A/B, etc.). */
-export const MARKETING_EXPERIMENTS = boolEnv("MARKETING_EXPERIMENTS", false);
-
-/** Allow waitlist / early-access capture forms. */
-export const WAITLIST_ENABLED = boolEnv("WAITLIST_ENABLED", false);
+/** Persist pipeline artifacts (probes, timeline, scores) for resume/debug. */
+export const PIPELINE_ARTIFACTS = boolEnv("PIPELINE_ARTIFACTS", true);
 
 export const flags = {
   SHARE_AUTO,
@@ -44,4 +45,6 @@ export const flags = {
   MUSIC_PAID_ENABLED,
   MARKETING_EXPERIMENTS,
   WAITLIST_ENABLED,
+  RENDER_EXTRA_DERIVATIVES,
+  PIPELINE_ARTIFACTS,
 } as const;

@@ -36,6 +36,8 @@ export async function GET() {
     supabaseService: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
     visionAi: hasVisionProvider(),
     ffmpeg: Boolean(ffmpegPath),
+    pipelineArtifacts: process.env.PIPELINE_ARTIFACTS !== "false",
+    renderExtraDerivatives: process.env.RENDER_EXTRA_DERIVATIVES === "true",
   };
 
   if (ffmpegPath) {
@@ -44,9 +46,12 @@ export async function GET() {
       let stdout = "";
       child.stdout.on("data", (chunk) => { stdout += chunk.toString(); });
       const code = await new Promise<number>((resolve) => child.on("close", resolve));
+      // Informational only — end cards no longer require drawtext.
       checks.ffmpegDrawtext = code === 0 && stdout.includes("drawtext");
+      checks.endCardDrawtextRequired = false;
     } catch {
       checks.ffmpegDrawtext = false;
+      checks.endCardDrawtextRequired = false;
     }
   }
 

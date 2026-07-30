@@ -12,7 +12,13 @@ import {
   processingCareLine,
 } from "@/lib/greeting";
 
-const STAGES = ["analyzing", "selecting", "building", "rendering"] as const;
+const STAGES = [
+  "ingesting",
+  "selecting",
+  "timeline_ready",
+  "building",
+  "rendering",
+] as const;
 
 function notifyRecapReady() {
   try {
@@ -166,14 +172,18 @@ export function ProcessingTracker({ jobId }: { jobId: string }) {
 
       <ol className="space-y-3">
         {STAGES.map((item) => {
+          const normalized =
+            stage === "analyzing"
+              ? "ingesting"
+              : STAGES.includes(stage as (typeof STAGES)[number])
+                ? stage
+                : "ingesting";
           const currentIndex = STAGES.indexOf(
-            (STAGES.includes(stage as (typeof STAGES)[number])
-              ? stage
-              : "analyzing") as (typeof STAGES)[number]
+            normalized as (typeof STAGES)[number]
           );
           const itemIndex = STAGES.indexOf(item);
           const done = itemIndex < currentIndex || stage === "completed";
-          const active = item === stage;
+          const active = item === normalized;
           return (
             <li
               key={item}
