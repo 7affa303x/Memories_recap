@@ -28,7 +28,30 @@ export default function TermsPage() {
           <p>
             Memories Recap / operator to be updated upon LLC formation. Until
             then, these terms describe the service operated at memoriesrecap.app
-            and related deployments.
+            and related deployments (including memories-recap-one.vercel.app).
+          </p>
+        </section>
+
+        <section className="space-y-2">
+          <h2 className="text-lg font-medium text-neutral-900">
+            Payments &amp; Merchant of Record
+          </h2>
+          <p>
+            When you buy Moments packs or Pro through Paddle Checkout, our order
+            process is conducted by our online reseller Paddle.com. Paddle.com
+            is the Merchant of Record for those orders. Paddle provides customer
+            service inquiries and handles returns for purchases made through
+            them. You can contact Paddle at{" "}
+            <a
+              className="text-green-700 underline"
+              href="https://paddle.net"
+              target="_blank"
+              rel="noreferrer"
+            >
+              paddle.net
+            </a>
+            . Other payment providers may apply for older or alternate
+            checkouts; their terms apply to those transactions.
           </p>
         </section>
 

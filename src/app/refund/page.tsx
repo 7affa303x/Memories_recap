@@ -50,16 +50,25 @@ export default function RefundPage() {
             Unused purchases
           </h2>
           <p>
-            Requests for unused Moments packs within 14 days of purchase may be
-            reviewed case by case when little or no Moments balance has been
-            spent. Contact{" "}
+            Requests for unused Moments packs within 30 days of purchase may be
+            reviewed when little or no Moments balance has been spent. Contact{" "}
             <a
               className="text-green-700 underline"
               href="mailto:haffa303@gmail.com"
             >
               haffa303@gmail.com
             </a>{" "}
-            with your account email and order ID.
+            with your account email and order ID. For orders where Paddle.com is
+            the Merchant of Record, Paddle may also handle returns — see{" "}
+            <a
+              className="text-green-700 underline"
+              href="https://paddle.net"
+              target="_blank"
+              rel="noreferrer"
+            >
+              paddle.net
+            </a>
+            .
           </p>
         </section>
 

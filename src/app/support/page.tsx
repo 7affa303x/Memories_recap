@@ -49,7 +49,7 @@ export default async function SupportPage() {
         <div className="rounded-[16px] bg-neutral-50 p-5 text-sm text-neutral-600 shadow-sm">
           <p className="font-medium text-neutral-900">Before you write</p>
           <ul className="mt-2 list-disc space-y-1 pl-5">
-            <li>Check Billing → credits balance</li>
+            <li>Check Billing → Moments balance</li>
             <li>Open the job from Dashboard for status/errors</li>
             <li>Try Remix with another mood if the cut feels off</li>
             <li>
