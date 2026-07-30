@@ -38,6 +38,7 @@ export async function GET() {
     ffmpeg: Boolean(ffmpegPath),
     pipelineArtifacts: process.env.PIPELINE_ARTIFACTS !== "false",
     renderExtraDerivatives: process.env.RENDER_EXTRA_DERIVATIVES === "true",
+    pipelinePgDualWrite: process.env.PIPELINE_PG_DUALWRITE !== "false",
   };
 
   if (ffmpegPath) {
@@ -68,6 +69,17 @@ export async function GET() {
     checks.storage = false;
     checks.storageError =
       error instanceof Error ? error.message : "storage_failed";
+  }
+
+  try {
+    const { pgPipelineTablesOk } = await import("@/lib/pipeline/pg");
+    const pg = await pgPipelineTablesOk();
+    checks.pipelinePgTables = pg.ok;
+    checks.pipelinePgDetail = pg.detail;
+  } catch (error) {
+    checks.pipelinePgTables = false;
+    checks.pipelinePgDetail =
+      error instanceof Error ? error.message : "probe_failed";
   }
 
   const billingConfigured =

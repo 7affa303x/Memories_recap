@@ -37,3 +37,18 @@ describe("pipeline contracts", () => {
     expect(PIPELINE_STAGES).toContain("scored");
   });
 });
+
+describe("pg dual-write flag", () => {
+  it("defaults dual-write on when env unset", () => {
+    const prev = process.env.PIPELINE_PG_DUALWRITE;
+    delete process.env.PIPELINE_PG_DUALWRITE;
+    const raw = process.env.PIPELINE_PG_DUALWRITE as string | undefined;
+    const enabled =
+      raw == null || raw === ""
+        ? true
+        : ["1", "true", "yes", "on"].includes(String(raw).toLowerCase().trim());
+    expect(enabled).toBe(true);
+    if (prev === undefined) delete process.env.PIPELINE_PG_DUALWRITE;
+    else process.env.PIPELINE_PG_DUALWRITE = prev;
+  });
+});

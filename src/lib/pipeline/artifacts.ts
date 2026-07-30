@@ -4,6 +4,7 @@ import type {
   ArtifactRef,
   PipelineJobState,
 } from "@/lib/pipeline/types";
+import { pgInsertEvent, pgUpsertArtifact } from "@/lib/pipeline/pg";
 
 const BUCKET = "app-data";
 
@@ -62,6 +63,13 @@ export async function ensurePipelineState(
     updated_at: new Date().toISOString(),
   };
   await savePipelineState(state);
+  await pgInsertEvent({
+    jobId,
+    userId,
+    stage: "queued",
+    event: "pipeline_state_created",
+    detail: { attempt },
+  });
   return state;
 }
 
@@ -80,6 +88,16 @@ export async function setPipelineStage(
     updated_at: new Date().toISOString(),
   };
   await savePipelineState(next);
+  await pgInsertEvent({
+    jobId,
+    userId,
+    stage,
+    event: "stage_changed",
+    detail: {
+      failed_stage: next.failed_stage,
+      attempt: next.attempt,
+    },
+  });
   return next;
 }
 
@@ -114,6 +132,23 @@ export async function writeArtifact<T>(input: {
     ...state,
     artifacts,
     updated_at: new Date().toISOString(),
+  });
+
+  await pgUpsertArtifact({
+    jobId: input.jobId,
+    userId: input.userId,
+    kind: input.kind,
+    storagePath: path,
+    uploadId: input.uploadId,
+    bytes,
+    meta: input.meta,
+  });
+  await pgInsertEvent({
+    jobId: input.jobId,
+    userId: input.userId,
+    stage: state.stage,
+    event: "artifact_written",
+    detail: { kind: input.kind, path, bytes },
   });
 
   return ref;
