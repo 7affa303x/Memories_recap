@@ -122,7 +122,7 @@ export default async function PricingPage() {
             <p className="mt-1 text-sm text-neutral-500">
               Same Pro benefits · ~2 months free vs monthly · honest discount for
               people who stay. Email support to enable annual checkout while we
-              finish wiring the product in Gumroad (Creem fallback if configured).
+              finish wiring the yearly price in Paddle.
             </p>
           </div>
           <Button asChild variant="secondary" className="h-12 w-full rounded-[16px]">
@@ -173,11 +173,13 @@ export default async function PricingPage() {
           <p>1 credit ≈ 1 MB processed (minimum 10 per job).</p>
           <p>If processing fails on our side, credits are restored.</p>
           <p>
-            Checkout is powered by Gumroad (primary) with Creem as fallback.
-            After payment, credits land on your Memories Recap account
-            automatically.
+            Checkout is powered by Paddle.com (Merchant of Record). After
+            payment, Moments land on your Memories Recap account automatically.
           </p>
-          <p>Manage cards and memberships from the billing portal / Gumroad library.</p>
+          <p>
+            Manage cards and memberships from the billing portal / Paddle
+            customer portal.
+          </p>
           <p>
             Need a hand?{" "}
             <Link href="/support" className="text-green-700 underline">

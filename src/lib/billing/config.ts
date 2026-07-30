@@ -58,21 +58,20 @@ export function getPaddleClientToken() {
 export function getBillingProvider(): "paddle" | "gumroad" | "creem" {
   const raw = (process.env.BILLING_PROVIDER || "").toLowerCase();
   if (raw === "paddle" || raw === "gumroad" || raw === "creem") return raw;
-  // Prefer Gumroad when token + at least one permalink are present
-  // (keeps current production stable until BILLING_PROVIDER=paddle is set).
-  if (
-    process.env.GUMROAD_ACCESS_TOKEN &&
-    (process.env.GUMROAD_PERMALINK_CREDITS_SMALL ||
-      process.env.GUMROAD_PRODUCT_CREDITS_SMALL)
-  ) {
-    return "gumroad";
-  }
+  // Prefer Paddle when live API key + at least one price id are present.
   if (
     process.env.PADDLE_API_KEY &&
     (process.env.PADDLE_PRICE_CREDITS_SMALL ||
       process.env.PADDLE_PRICE_SUBSCRIPTION)
   ) {
     return "paddle";
+  }
+  if (
+    process.env.GUMROAD_ACCESS_TOKEN &&
+    (process.env.GUMROAD_PERMALINK_CREDITS_SMALL ||
+      process.env.GUMROAD_PRODUCT_CREDITS_SMALL)
+  ) {
+    return "gumroad";
   }
   return "creem";
 }

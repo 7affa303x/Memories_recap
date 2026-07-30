@@ -140,7 +140,9 @@ export default async function BillingPage({
             <a href="/api/billing/portal">
               {provider === "gumroad"
                 ? "Manage on Gumroad"
-                : "Open billing portal"}
+                : provider === "paddle"
+                  ? "Open Paddle portal"
+                  : "Open billing portal"}
             </a>
           </Button>
           <Button

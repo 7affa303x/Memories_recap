@@ -36,8 +36,8 @@ function emptyState(userId: string, email: string): BillingState {
 }
 
 function normalizeState(raw: BillingState): BillingState {
-  // Compat only: older Storage JSON may still carry Polar/Paddle field names.
-  // Active billing is Gumroad (primary) or Creem (fallback) — do not treat Polar/Paddle as live MoR.
+  // Compat: older Storage JSON may still carry Polar field names.
+  // Active MoR is Paddle when BILLING_PROVIDER=paddle (Gumroad/Creem remain fallbacks).
   const anyRaw = raw as BillingState & {
     polarCustomerId?: string | null;
     paddleCustomerId?: string | null;
