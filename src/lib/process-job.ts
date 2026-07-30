@@ -1021,6 +1021,17 @@ export async function processJob(jobId: string, userId: string) {
     logInfo("process_completed", { jobId, userId, ms: Date.now() - started });
 
     try {
+      const { grantFirstRecapReward } = await import("@/lib/rewards/grants");
+      if (job?.notify_email) {
+        await grantFirstRecapReward(userId, job.notify_email, jobId).catch(
+          () => undefined
+        );
+      }
+    } catch {
+      /* optional earn reward */
+    }
+
+    try {
       const { sendRecapReadyEmail } = await import("@/lib/email");
       const { getAppUrl } = await import("@/lib/billing/config");
       if (job?.notify_email) {

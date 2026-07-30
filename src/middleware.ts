@@ -19,13 +19,12 @@ const ALLOWED_HOSTS = new Set([
  */
 export function middleware(request: NextRequest) {
   const host = request.headers.get("host") || "";
+  const ref = request.nextUrl.searchParams.get("ref");
 
-  if (ALLOWED_HOSTS.has(host)) {
-    return NextResponse.next();
-  }
+  let response: NextResponse;
 
-  // e.g. memories-recap-g8npj8nhk-algeria1.vercel.app
   if (
+    !ALLOWED_HOSTS.has(host) &&
     host.endsWith(".vercel.app") &&
     host.startsWith("memories-recap-")
   ) {
@@ -33,10 +32,23 @@ export function middleware(request: NextRequest) {
     url.protocol = "https:";
     url.host = CANONICAL_HOST;
     url.port = "";
-    return NextResponse.redirect(url, 308);
+    response = NextResponse.redirect(url, 308);
+  } else {
+    response = NextResponse.next();
   }
 
-  return NextResponse.next();
+  // Persist invite ref for Google OAuth round-trip
+  if (ref && /^[a-zA-Z0-9_-]{6,128}$/.test(ref)) {
+    response.cookies.set("mr_ref", ref, {
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 60 * 60 * 24 * 14,
+    });
+  }
+
+  return response;
 }
 
 export const config = {

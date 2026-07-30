@@ -128,6 +128,10 @@ export function getGumroadProductRef(key: ProductKey): {
       id: process.env.GUMROAD_PRODUCT_SUBSCRIPTION,
       permalink: process.env.GUMROAD_PERMALINK_SUBSCRIPTION,
     },
+    subscription_ultra: {
+      id: process.env.GUMROAD_PRODUCT_SUBSCRIPTION_ULTRA,
+      permalink: process.env.GUMROAD_PERMALINK_SUBSCRIPTION_ULTRA,
+    },
     credits_small: {
       id: process.env.GUMROAD_PRODUCT_CREDITS_SMALL,
       permalink: process.env.GUMROAD_PERMALINK_CREDITS_SMALL,
@@ -140,6 +144,10 @@ export function getGumroadProductRef(key: ProductKey): {
       id: process.env.GUMROAD_PRODUCT_CREDITS_LARGE,
       permalink: process.env.GUMROAD_PERMALINK_CREDITS_LARGE,
     },
+    credits_studio: {
+      id: process.env.GUMROAD_PRODUCT_CREDITS_STUDIO,
+      permalink: process.env.GUMROAD_PERMALINK_CREDITS_STUDIO,
+    },
   };
   return map[key];
 }
@@ -151,9 +159,11 @@ export function productKeyFromGumroad(input: {
 }): ProductKey | null {
   const entries: Array<[ProductKey, { id?: string; permalink?: string }]> = [
     ["subscription", getGumroadProductRef("subscription")],
+    ["subscription_ultra", getGumroadProductRef("subscription_ultra")],
     ["credits_small", getGumroadProductRef("credits_small")],
     ["credits_medium", getGumroadProductRef("credits_medium")],
     ["credits_large", getGumroadProductRef("credits_large")],
+    ["credits_studio", getGumroadProductRef("credits_studio")],
   ];
   for (const [key, ref] of entries) {
     if (input.productId && ref.id && input.productId === ref.id) return key;

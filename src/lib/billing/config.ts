@@ -61,25 +61,36 @@ export const MIN_JOB_CREDITS = numberEnv("MIN_JOB_CREDITS", 10);
 
 export const PRODUCT_CREDITS: Record<ProductKey, number> = {
   subscription: numberEnv("CREEM_CREDITS_SUBSCRIPTION", 2000),
+  subscription_ultra: numberEnv("CREEM_CREDITS_ULTRA", 8000),
   credits_small: numberEnv("CREEM_CREDITS_SMALL", 500),
   credits_medium: numberEnv("CREEM_CREDITS_MEDIUM", 2000),
   credits_large: numberEnv("CREEM_CREDITS_LARGE", 5000),
+  credits_studio: numberEnv("CREEM_CREDITS_STUDIO", 50000),
 };
 
-/** Display prices in USD (mirrors Creem catalog). */
+/** Display prices in USD (mirrors Creem/Gumroad catalog). */
 export const PRODUCT_USD: Record<ProductKey, number> = {
   subscription: 17,
+  subscription_ultra: 97,
   credits_small: 9,
   credits_medium: 29,
   credits_large: 69,
+  /** Anchor / enterprise display pack */
+  credits_studio: 1497,
 };
+
+/** Pro monthly after credit-pack purchase (7-day window). Display only until checkout SKU exists. */
+export const PRO_DISCOUNT_USD = 12;
+export const PRO_DISCOUNT_WINDOW_DAYS = 7;
 
 export function getProductId(key: ProductKey) {
   const map: Record<ProductKey, string> = {
     subscription: "CREEM_PRODUCT_SUBSCRIPTION",
+    subscription_ultra: "CREEM_PRODUCT_SUBSCRIPTION_ULTRA",
     credits_small: "CREEM_PRODUCT_CREDITS_SMALL",
     credits_medium: "CREEM_PRODUCT_CREDITS_MEDIUM",
     credits_large: "CREEM_PRODUCT_CREDITS_LARGE",
+    credits_studio: "CREEM_PRODUCT_CREDITS_STUDIO",
   };
   return required(map[key]);
 }
@@ -87,9 +98,11 @@ export function getProductId(key: ProductKey) {
 export function productKeyFromId(productId: string): ProductKey | null {
   const entries: Array<[ProductKey, string | undefined]> = [
     ["subscription", process.env.CREEM_PRODUCT_SUBSCRIPTION],
+    ["subscription_ultra", process.env.CREEM_PRODUCT_SUBSCRIPTION_ULTRA],
     ["credits_small", process.env.CREEM_PRODUCT_CREDITS_SMALL],
     ["credits_medium", process.env.CREEM_PRODUCT_CREDITS_MEDIUM],
     ["credits_large", process.env.CREEM_PRODUCT_CREDITS_LARGE],
+    ["credits_studio", process.env.CREEM_PRODUCT_CREDITS_STUDIO],
   ];
   for (const [key, id] of entries) {
     if (id && id === productId) return key;

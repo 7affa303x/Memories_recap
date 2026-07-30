@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
+import { RecapVideo } from "@/components/recap-video";
 
 const SHARE_PWD_KEY = (token: string) => `share-pwd:${token}`;
 
@@ -118,22 +119,18 @@ export default function PublicSharePage({
         {data ? (
           <>
             <div className="overflow-hidden rounded-[16px] bg-neutral-50 shadow-sm">
-              <video
+              <RecapVideo
+                playerId="share-landscape"
                 className="aspect-video w-full bg-black"
                 src={data.landscapeUrl}
-                controls
-                playsInline
-                preload="metadata"
               />
             </div>
             {data.verticalUrl ? (
               <div className="mx-auto max-w-[280px] overflow-hidden rounded-[16px] bg-neutral-50 shadow-sm">
-                <video
+                <RecapVideo
+                  playerId="share-vertical"
                   className="aspect-[9/16] w-full bg-black"
                   src={data.verticalUrl}
-                  controls
-                  playsInline
-                  preload="metadata"
                 />
               </div>
             ) : null}

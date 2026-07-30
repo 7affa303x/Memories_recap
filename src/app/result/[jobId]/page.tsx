@@ -15,6 +15,7 @@ import {
   VersionRestoreButton,
 } from "@/components/result-actions";
 import { PreviewClipButton } from "@/components/preview-clip-button";
+import { RecapVideo } from "@/components/recap-video";
 import Link from "next/link";
 import { formatBytes } from "@/lib/types";
 import {
@@ -129,12 +130,10 @@ export default async function ResultPage({ params }: Props) {
         <div className="space-y-2">
           <p className="text-sm text-neutral-500">Landscape</p>
           <div className="overflow-hidden rounded-[16px] bg-neutral-50 shadow-sm">
-            <video
+            <RecapVideo
+              playerId="landscape"
               className="aspect-video w-full bg-black"
               src={landscapeUrl}
-              controls
-              playsInline
-              preload="metadata"
             />
           </div>
         </div>
@@ -143,12 +142,10 @@ export default async function ResultPage({ params }: Props) {
           <div className="space-y-2">
             <p className="text-sm text-neutral-500">Vertical</p>
             <div className="mx-auto max-w-[280px] overflow-hidden rounded-[16px] bg-neutral-50 shadow-sm">
-              <video
+              <RecapVideo
+                playerId="vertical"
                 className="aspect-[9/16] w-full bg-black"
                 src={verticalUrl}
-                controls
-                playsInline
-                preload="metadata"
               />
             </div>
           </div>
@@ -158,12 +155,10 @@ export default async function ResultPage({ params }: Props) {
           <div className="space-y-2">
             <p className="text-sm text-neutral-500">Pro highlights</p>
             <div className="overflow-hidden rounded-[16px] bg-neutral-50 shadow-sm">
-              <video
+              <RecapVideo
+                playerId="highlights"
                 className="aspect-video w-full bg-black"
                 src={highlightsUrl}
-                controls
-                playsInline
-                preload="metadata"
               />
             </div>
           </div>
