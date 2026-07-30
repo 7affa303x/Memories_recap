@@ -22,6 +22,14 @@ export async function GET() {
     creemTestMode: isCreemTestMode(),
     gumroadToken: Boolean(process.env.GUMROAD_ACCESS_TOKEN),
     gumroadWebhook: Boolean(process.env.GUMROAD_WEBHOOK_SECRET),
+    paddleKey: Boolean(process.env.PADDLE_API_KEY),
+    paddleClientToken: Boolean(process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN),
+    paddleWebhook: Boolean(process.env.PADDLE_NOTIFICATION_WEBHOOK_SECRET),
+    paddlePrices: Boolean(
+      process.env.PADDLE_PRICE_SUBSCRIPTION &&
+        process.env.PADDLE_PRICE_CREDITS_SMALL
+    ),
+    paddleEnv: process.env.NEXT_PUBLIC_PADDLE_ENV || "production",
     // Soft check — present/absent reported but does not fail health alone
     blobToken: Boolean(process.env.BLOB_READ_WRITE_TOKEN),
     cronConfigured:
@@ -53,7 +61,11 @@ export async function GET() {
   const billingConfigured =
     provider === "gumroad"
       ? Boolean(checks.gumroadToken)
-      : Boolean(checks.creemKey);
+      : provider === "paddle"
+        ? Boolean(
+            checks.paddleKey && checks.paddleClientToken && checks.paddlePrices
+          )
+        : Boolean(checks.creemKey);
 
   const ok =
     checks.app &&

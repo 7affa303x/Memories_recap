@@ -4,9 +4,18 @@ import { getCreemClient } from "@/lib/billing/creem";
 import {
   getAppUrl,
   getBillingProvider,
+  getPriceId,
   getProductId,
 } from "@/lib/billing/config";
 import { buildGumroadCheckoutUrl } from "@/lib/billing/gumroad";
+import {
+  findOrCreatePaddleCustomer,
+  getPaddleClient,
+} from "@/lib/billing/paddle";
+import {
+  getBillingSummary,
+  setPaddleCustomerId,
+} from "@/lib/billing/credits";
 import { checkoutCreateBodySchema, parseOr400 } from "@/lib/validation";
 
 export async function POST(request: Request) {
@@ -28,6 +37,46 @@ export async function POST(request: Request) {
   const provider = getBillingProvider();
 
   try {
+    if (provider === "paddle") {
+      const priceId = getPriceId(product);
+      const paddle = getPaddleClient();
+      const appUrl = getAppUrl();
+      const summary = await getBillingSummary(
+        session.user.id,
+        session.user.email
+      );
+
+      const customer = await findOrCreatePaddleCustomer({
+        email: session.user.email,
+        userId: session.user.id,
+        existingCustomerId: summary.paddleCustomerId,
+      });
+      await setPaddleCustomerId(
+        session.user.id,
+        session.user.email,
+        customer.id
+      );
+
+      const transaction = await paddle.transactions.create({
+        items: [{ priceId, quantity: 1 }],
+        customerId: customer.id,
+        customData: {
+          userId: session.user.id,
+          email: session.user.email,
+          product,
+        },
+        checkout: {
+          url: `${appUrl}/billing?checkout=success`,
+        },
+      });
+
+      return NextResponse.json({
+        transactionId: transaction.id,
+        id: transaction.id,
+        provider: "paddle",
+      });
+    }
+
     if (provider === "gumroad") {
       const url = buildGumroadCheckoutUrl({
         product,

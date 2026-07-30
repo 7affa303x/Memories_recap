@@ -334,6 +334,11 @@ export async function getBillingSummary(userId: string, email: string) {
       transactions: state.transactions.slice(0, 50),
       history: state.history.slice(0, 50),
       creemCustomerId: state.creemCustomerId,
+      paddleCustomerId:
+        state.paddleCustomerId ||
+        (state.creemCustomerId?.startsWith("ctm_")
+          ? state.creemCustomerId
+          : null),
       streakCurrent: streak.current,
       streakLongest: streak.longest,
       momentsName: "Moments",
@@ -360,6 +365,11 @@ export async function getBillingSummary(userId: string, email: string) {
       transactions: state.transactions.slice(0, 50),
       history: state.history.slice(0, 50),
       creemCustomerId: state.creemCustomerId,
+      paddleCustomerId:
+        state.paddleCustomerId ||
+        (state.creemCustomerId?.startsWith("ctm_")
+          ? state.creemCustomerId
+          : null),
       streakCurrent: streak.current,
       streakLongest: streak.longest,
       momentsName: "Moments",
@@ -374,6 +384,19 @@ export async function setCreemCustomerId(
 ) {
   return mutate(userId, email, (state) => {
     state.creemCustomerId = creemCustomerId;
+  });
+}
+
+/** Store Paddle customer id (ctm_...) for checkout Retain + portal. */
+export async function setPaddleCustomerId(
+  userId: string,
+  email: string,
+  paddleCustomerId: string
+) {
+  return mutate(userId, email, (state) => {
+    state.paddleCustomerId = paddleCustomerId;
+    // Shared slot used by older portal/summary readers
+    state.creemCustomerId = paddleCustomerId;
   });
 }
 
