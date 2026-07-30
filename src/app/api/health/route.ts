@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase/admin";
 import { hasVisionProvider } from "@/lib/ai-vision";
 import { getBillingProvider, isCreemTestMode } from "@/lib/billing/config";
+import ffmpegPath from "ffmpeg-static";
+import { spawn } from "node:child_process";
 import vercelConfig from "../../../../vercel.json";
 
 export const runtime = "nodejs";
@@ -33,7 +35,20 @@ export async function GET() {
     supabaseUrl: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
     supabaseService: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
     visionAi: hasVisionProvider(),
+    ffmpeg: Boolean(ffmpegPath),
   };
+
+  if (ffmpegPath) {
+    try {
+      const child = spawn(ffmpegPath, ["-filters"], { stdio: ["ignore", "pipe", "pipe"] });
+      let stdout = "";
+      child.stdout.on("data", (chunk) => { stdout += chunk.toString(); });
+      const code = await new Promise<number>((resolve) => child.on("close", resolve));
+      checks.ffmpegDrawtext = code === 0 && stdout.includes("drawtext");
+    } catch {
+      checks.ffmpegDrawtext = false;
+    }
+  }
 
   try {
     const supabase = getServiceSupabase();
