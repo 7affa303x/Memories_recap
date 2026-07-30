@@ -10,6 +10,7 @@
  * | WAITLIST_ENABLED | WAITLIST_ENABLED | false | Waitlist forms |
  * | RENDER_EXTRA_DERIVATIVES | RENDER_EXTRA_DERIVATIVES | false | story/tiktok/highlights encodes |
  * | PIPELINE_ARTIFACTS | PIPELINE_ARTIFACTS | true | Persist stage artifacts under app-data |
+ * | PIPELINE_PG_DUALWRITE | PIPELINE_PG_DUALWRITE | true | Mirror leases/artifacts/events to Postgres |
  */
 
 function boolEnv(name: string, fallback = false) {
@@ -39,6 +40,9 @@ export const RENDER_EXTRA_DERIVATIVES = boolEnv(
 /** Persist pipeline artifacts (probes, timeline, scores) for resume/debug. */
 export const PIPELINE_ARTIFACTS = boolEnv("PIPELINE_ARTIFACTS", true);
 
+/** Mirror pipeline control data into Postgres tables (soft dual-write). */
+export const PIPELINE_PG_DUALWRITE = boolEnv("PIPELINE_PG_DUALWRITE", true);
+
 export const flags = {
   SHARE_AUTO,
   REFERRALS_ENABLED,
@@ -47,4 +51,5 @@ export const flags = {
   WAITLIST_ENABLED,
   RENDER_EXTRA_DERIVATIVES,
   PIPELINE_ARTIFACTS,
+  PIPELINE_PG_DUALWRITE,
 } as const;

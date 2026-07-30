@@ -6,6 +6,7 @@ import {
   LEASE_STALE_MS,
 } from "@/lib/pipeline/types";
 import { logInfo } from "@/lib/logger";
+import { pgDeleteLease, pgInsertEvent, pgUpsertLease } from "@/lib/pipeline/pg";
 
 const BUCKET = "app-data";
 
@@ -107,6 +108,20 @@ export async function tryAcquireProcessingLease(input: {
   if (!confirm || confirm.ownerId !== input.ownerId) {
     return { ok: false, reason: "lost_race" };
   }
+  await pgUpsertLease({
+    jobId: lease.jobId,
+    userId: lease.userId,
+    ownerId: lease.ownerId,
+    startedAt: lease.startedAt,
+    heartbeatAt: lease.heartbeatAt,
+    attempt: lease.attempt,
+  });
+  await pgInsertEvent({
+    jobId: lease.jobId,
+    userId: lease.userId,
+    event: "lease_acquired",
+    detail: { ownerId: lease.ownerId, attempt: lease.attempt },
+  });
   logInfo("lease_acquired", {
     jobId: input.jobId,
     ownerId: input.ownerId,
@@ -121,10 +136,19 @@ export async function heartbeatProcessingLease(
 ): Promise<boolean> {
   const existing = await readJson<ProcessingLease>(leasePath(jobId));
   if (!existing || existing.ownerId !== ownerId) return false;
+  const heartbeatAt = new Date().toISOString();
   await writeJson(leasePath(jobId), {
     ...existing,
-    heartbeatAt: new Date().toISOString(),
+    heartbeatAt,
   } satisfies ProcessingLease);
+  await pgUpsertLease({
+    jobId: existing.jobId,
+    userId: existing.userId,
+    ownerId: existing.ownerId,
+    startedAt: existing.startedAt,
+    heartbeatAt,
+    attempt: existing.attempt,
+  });
   return true;
 }
 
@@ -132,12 +156,17 @@ export async function releaseProcessingLease(
   jobId: string,
   ownerId?: string
 ): Promise<void> {
-  if (ownerId) {
-    const existing = await readJson<ProcessingLease>(leasePath(jobId));
-    if (existing && existing.ownerId !== ownerId) return;
-  }
+  const existing = await readJson<ProcessingLease>(leasePath(jobId));
+  if (ownerId && existing && existing.ownerId !== ownerId) return;
   const supabase = getServiceSupabase();
   await supabase.storage.from(BUCKET).remove([leasePath(jobId)]);
+  await pgDeleteLease(jobId);
+  await pgInsertEvent({
+    jobId,
+    userId: existing?.userId ?? "system",
+    event: "lease_released",
+    detail: { ownerId: ownerId ?? existing?.ownerId ?? null },
+  });
 }
 
 export function maxGlobalEncodes() {
