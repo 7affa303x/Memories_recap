@@ -2,12 +2,8 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { REFERRALS_ENABLED } from "@/lib/flags";
 import { getAppUrl } from "@/lib/billing/config";
+import { REWARD } from "@/lib/rewards/config";
 
-/**
- * Referral scaffold.
- * - Disabled → 501
- * - Enabled → invite link with ?ref=userId (credit rewards not wired yet)
- */
 export async function GET() {
   if (!REFERRALS_ENABLED) {
     return NextResponse.json(
@@ -28,6 +24,8 @@ export async function GET() {
     enabled: true,
     inviteCode,
     inviteUrl,
-    note: "Share your invite link. Credit rewards land in a later release.",
+    inviterReward: REWARD.referralInviter,
+    inviteeReward: REWARD.referralInvitee,
+    note: `You earn +${REWARD.referralInviter} Moments when a friend signs in. They get +${REWARD.referralInvitee}.`,
   });
 }

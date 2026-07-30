@@ -3,7 +3,12 @@ export type CreditSource =
   | "subscription"
   | "pack"
   | "refund_restore"
-  | "daily_login";
+  | "daily_login"
+  | "reward_referral"
+  | "reward_family_share"
+  | "reward_first_recap"
+  | "reward_rating"
+  | "reward_streak";
 
 export type BillingSubscription = {
   id: string;

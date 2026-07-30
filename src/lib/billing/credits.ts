@@ -278,18 +278,15 @@ function utcDayKey(d = new Date()) {
 }
 
 /**
- * Daily login top-up when balance is under the cap. Idempotent per UTC day.
- * Only after the user has at least one completed recap job.
+ * Daily visit Moments + streak touch. Idempotent per UTC day.
+ * Available from day one (no need to finish a recap first).
  */
 export async function grantDailyLoginCredits(userId: string, email: string) {
   await ensureBillingUser(userId, email);
-  const { listJobsForUser } = await import("@/lib/store");
-  const jobs = await listJobsForUser(userId);
-  const hasCompletedRecap = jobs.some((job) => job.status === "completed");
-  if (!hasCompletedRecap) {
-    return (await readState(userId)) ?? emptyState(userId, email);
-  }
-  return mutate(userId, email, (state) => {
+  const { touchStreak } = await import("@/lib/rewards/streak");
+  const { grantStreakBonus } = await import("@/lib/rewards/grants");
+
+  const state = await mutate(userId, email, (state) => {
     const today = utcDayKey();
     if (state.lastDailyLoginGrantAt === today) return;
     const balance = availableCredits(state);
@@ -307,12 +304,22 @@ export async function grantDailyLoginCredits(userId: string, email: string) {
       metadata: { day: today, balanceBefore: balance },
     });
   });
+
+  const { streak, advanced, hit7, hit30 } = await touchStreak(userId);
+  if (advanced && hit7) {
+    await grantStreakBonus(userId, email, 7).catch(() => undefined);
+  }
+  if (advanced && hit30) {
+    await grantStreakBonus(userId, email, 30).catch(() => undefined);
+  }
+
+  return { state, streak };
 }
 
 export async function getBillingSummary(userId: string, email: string) {
   try {
     await ensureBillingUser(userId, email);
-    const state = await grantDailyLoginCredits(userId, email);
+    const { state, streak } = await grantDailyLoginCredits(userId, email);
     return {
       balance: availableCredits(state),
       freeGranted: state.freeGranted,
@@ -327,10 +334,18 @@ export async function getBillingSummary(userId: string, email: string) {
       transactions: state.transactions.slice(0, 50),
       history: state.history.slice(0, 50),
       creemCustomerId: state.creemCustomerId,
+      streakCurrent: streak.current,
+      streakLongest: streak.longest,
+      momentsName: "Moments",
     };
   } catch (error) {
     console.error("getBillingSummary failed", error);
     const state = (await readState(userId)) ?? emptyState(userId, email);
+    const { readStreak } = await import("@/lib/rewards/streak");
+    const streak = await readStreak(userId).catch(() => ({
+      current: 0,
+      longest: 0,
+    }));
     return {
       balance: availableCredits(state),
       freeGranted: state.freeGranted,
@@ -345,6 +360,9 @@ export async function getBillingSummary(userId: string, email: string) {
       transactions: state.transactions.slice(0, 50),
       history: state.history.slice(0, 50),
       creemCustomerId: state.creemCustomerId,
+      streakCurrent: streak.current,
+      streakLongest: streak.longest,
+      momentsName: "Moments",
     };
   }
 }

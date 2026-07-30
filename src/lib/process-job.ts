@@ -865,6 +865,25 @@ export async function processJob(jobId: string, userId: string) {
       folder: options.folder || job?.folder || null,
     });
 
+    try {
+      const { getServiceSupabase } = await import("@/lib/supabase/admin");
+      const supabase = getServiceSupabase();
+      const { data } = await supabase.storage
+        .from("app-data")
+        .download(`users/${userId}.json`);
+      const email =
+        job?.notify_email ||
+        (data
+          ? ((JSON.parse(await data.text()) as { email?: string }).email ?? null)
+          : null);
+      if (email) {
+        const { grantFirstRecapReward } = await import("@/lib/rewards/grants");
+        await grantFirstRecapReward(userId, email, jobId);
+      }
+    } catch {
+      /* non-blocking */
+    }
+
     await dequeueJob(jobId).catch(() => undefined);
     await appendJobLog(userId, jobId, "process_completed", {
       ms: Date.now() - started,

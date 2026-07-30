@@ -31,7 +31,23 @@ export async function POST(request: Request, { params }: Params) {
   }
 
   const recap = await setRecapRating(jobId, session.user.id, rating);
-  return NextResponse.json({ ok: true, rating: recap?.rating });
+
+  let momentsGranted = 0;
+  if (session.user.email) {
+    const { grantRatingReward } = await import("@/lib/rewards/grants");
+    const granted = await grantRatingReward(
+      session.user.id,
+      session.user.email,
+      jobId
+    ).catch(() => null);
+    if (granted?.ok) momentsGranted = granted.amount;
+  }
+
+  return NextResponse.json({
+    ok: true,
+    rating: recap?.rating,
+    momentsGranted,
+  });
 }
 
 export const runtime = "nodejs";

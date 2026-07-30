@@ -17,12 +17,9 @@ import {
 import { PreviewClipButton } from "@/components/preview-clip-button";
 import Link from "next/link";
 import { formatBytes } from "@/lib/types";
-import {
-  resultCareLine,
-  softProNudgeLine,
-  welcomeLine,
-} from "@/lib/greeting";
+import { resultCareLine, welcomeLine } from "@/lib/greeting";
 import { getBillingSummary } from "@/lib/billing/credits";
+import { StreakBanner } from "@/components/streak-banner";
 
 type Props = { params: Promise<{ jobId: string }> };
 
@@ -73,22 +70,28 @@ export default async function ResultPage({ params }: Props) {
     ? new Date(recap.expires_at).toLocaleDateString()
     : null;
 
-  let showProNudge = false;
   let isPro = false;
+  let streakCurrent = 0;
+  let streakLongest = 0;
   try {
     const summary = await getBillingSummary(user.id, user.email);
     const status = summary.subscription?.status;
     isPro = status === "active" || status === "trialing";
-    showProNudge = !isPro;
+    streakCurrent = summary.streakCurrent || 0;
+    streakLongest = summary.streakLongest || 0;
   } catch {
-    showProNudge = true;
+    isPro = false;
   }
 
   return (
     <main className="mx-auto flex min-h-full w-full max-w-lg flex-col px-6 pb-16 pt-8">
       <AppHeader />
 
-      <section className="mt-10 space-y-6">
+      <section className="mt-8 space-y-6 animate-fade-up">
+        <StreakBanner
+          initialStreak={streakCurrent}
+          initialLongest={streakLongest}
+        />
         <div>
           <p className="text-sm font-medium text-green-700">
             {welcomeLine({ name: user.name })}
@@ -280,18 +283,19 @@ export default async function ResultPage({ params }: Props) {
           Music beds are for recap use under our library terms.
         </p>
 
-        {showProNudge ? (
-          <div className="rounded-[16px] bg-neutral-50 p-4 text-sm text-neutral-600 shadow-sm">
-            <p className="font-medium text-neutral-900">A gentle next step</p>
-            <p className="mt-2">{softProNudgeLine()}</p>
-            <Link
-              href="/pricing"
-              className="mt-3 inline-block text-green-700 underline"
-            >
-              See Pro quietly
-            </Link>
-          </div>
-        ) : null}
+        <div className="rounded-[16px] bg-green-50 p-4 text-sm text-green-950 shadow-sm">
+          <p className="font-medium">Keep the warmth going</p>
+          <p className="mt-2 text-green-900/80">
+            Share with family, rate how it felt, or invite a friend — earn more
+            Moments without the hard sell.
+          </p>
+          <Link
+            href="/moments"
+            className="mt-3 inline-block text-green-800 underline"
+          >
+            See ways to earn Moments
+          </Link>
+        </div>
 
         <div className="rounded-[16px] bg-neutral-50 p-4 text-sm text-neutral-600 shadow-sm">
           <p className="font-medium text-neutral-900">Commercial use</p>
