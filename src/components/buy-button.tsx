@@ -3,13 +3,17 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { trackClientEvent } from "@/components/analytics-pixels";
+import type { ProductKey } from "@/lib/billing/types";
+import type { BillingInterval } from "@/lib/billing/pricing";
 
 export function BuyButton({
   product,
   label,
+  interval,
 }: {
-  product: "subscription" | "credits_small" | "credits_medium" | "credits_large";
+  product: ProductKey;
   label: string;
+  interval?: BillingInterval;
 }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,12 +27,12 @@ export function BuyButton({
         onClick={async () => {
           setPending(true);
           setError(null);
-          trackClientEvent("InitiateCheckout", { product });
+          trackClientEvent("InitiateCheckout", { product, interval });
           try {
             const res = await fetch("/api/billing/checkout", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ product }),
+              body: JSON.stringify({ product, interval }),
             });
             const json = await res.json();
             if (!res.ok) throw new Error(json.error || "Checkout failed");

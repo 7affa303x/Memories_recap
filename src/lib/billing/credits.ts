@@ -338,18 +338,32 @@ export async function getBillingSummary(userId: string, email: string) {
       longest: 0,
     }));
     const packPurchaseAt = [...(state.transactions || [])]
-      .filter((t) => t.type === "purchase" || t.type === "pack_purchase" || t.metadata?.productKey)
+      .filter(
+        (t) =>
+          t.type === "purchase" ||
+          t.type === "pack_purchase" ||
+          t.type.startsWith("pack_") ||
+          t.metadata?.productKey ||
+          t.metadata?.product
+      )
       .map((t) => t.createdAt)
       .sort()
       .reverse()[0];
+    const subActive = Boolean(
+      state.subscription &&
+        ["active", "trialing"].includes(state.subscription.status)
+    );
+    const productId = state.subscription?.creemProductId || "";
+    const memberTier: "pro" | "ultra" | null = !subActive
+      ? null
+      : productId.includes("ultra") || productId === "subscription_ultra"
+        ? "ultra"
+        : "pro";
     const proDiscountEligible = Boolean(
       packPurchaseAt &&
         Date.now() - new Date(packPurchaseAt).getTime() <
           7 * 24 * 60 * 60 * 1000 &&
-        !(
-          state.subscription &&
-          ["active", "trialing"].includes(state.subscription.status)
-        )
+        !subActive
     );
     return {
       balance: availableCredits(state),
@@ -368,6 +382,7 @@ export async function getBillingSummary(userId: string, email: string) {
       streakCurrent: streak.current,
       streakLongest: streak.longest,
       proDiscountEligible,
+      memberTier,
       momentsName: "Moments",
     };
   } catch (error) {
@@ -393,6 +408,7 @@ export async function getBillingSummary(userId: string, email: string) {
       streakCurrent: streak.current,
       streakLongest: streak.longest,
       proDiscountEligible: false,
+      memberTier: null as "pro" | "ultra" | null,
       momentsName: "Moments",
     };
   }

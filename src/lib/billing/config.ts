@@ -37,10 +37,13 @@ export function getAppUrl() {
   ).replace(/\/$/, "");
 }
 
-/** Active merchant of record: gumroad | creem */
-export function getBillingProvider(): "gumroad" | "creem" {
+/** Active merchant of record: whop | gumroad | creem */
+export function getBillingProvider(): "whop" | "gumroad" | "creem" {
   const raw = (process.env.BILLING_PROVIDER || "").toLowerCase();
-  if (raw === "gumroad" || raw === "creem") return raw;
+  if (raw === "whop" || raw === "gumroad" || raw === "creem") return raw;
+  if (process.env.WHOP_API_KEY && process.env.WHOP_COMPANY_ID) {
+    return "whop";
+  }
   // Prefer Gumroad when token + at least one permalink are present
   if (
     process.env.GUMROAD_ACCESS_TOKEN &&
