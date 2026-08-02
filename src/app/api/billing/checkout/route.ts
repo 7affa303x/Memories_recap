@@ -7,6 +7,9 @@ import {
   getProductId,
 } from "@/lib/billing/config";
 import { buildGumroadCheckoutUrl } from "@/lib/billing/gumroad";
+import { createWhopCheckoutUrl } from "@/lib/billing/whop";
+import { getBillingSummary } from "@/lib/billing/credits";
+import { isSubscriptionProduct } from "@/lib/billing/pricing";
 import { checkoutCreateBodySchema, parseOr400 } from "@/lib/validation";
 
 export async function POST(request: Request) {
@@ -24,10 +27,33 @@ export async function POST(request: Request) {
     );
   }
   const product = parsed.data.product;
+  const interval = parsed.data.interval ?? "monthly";
 
   const provider = getBillingProvider();
 
   try {
+    if (provider === "whop") {
+      const summary = await getBillingSummary(
+        session.user.id,
+        session.user.email
+      );
+      const memberTier = summary.memberTier ?? null;
+      const checkout = await createWhopCheckoutUrl({
+        product,
+        userId: session.user.id,
+        email: session.user.email,
+        interval: isSubscriptionProduct(product) ? interval : "monthly",
+        packBuyerDiscount: Boolean(summary.proDiscountEligible),
+        memberTier,
+      });
+      return NextResponse.json({
+        url: checkout.url,
+        id: checkout.id,
+        provider: "whop",
+        quote: checkout.quote,
+      });
+    }
+
     if (provider === "gumroad") {
       const url = buildGumroadCheckoutUrl({
         product,
@@ -51,6 +77,7 @@ export async function POST(request: Request) {
         userId: session.user.id,
         email: session.user.email,
         product,
+        interval,
       },
     });
 
