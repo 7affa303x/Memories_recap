@@ -16,6 +16,10 @@ export async function GET() {
     return NextResponse.redirect("https://gumroad.com/library");
   }
 
+  if (getBillingProvider() === "whop") {
+    return NextResponse.redirect("https://whop.com/orders");
+  }
+
   const summary = await getBillingSummary(session.user.id, session.user.email);
   if (!summary.creemCustomerId) {
     return NextResponse.redirect(new URL("/billing?portal=missing", appUrl));

@@ -132,56 +132,66 @@ export async function POST(request: Request, { params }: Params) {
   });
   await enqueueJob(jobId, userId);
 
-  after(async () => {
-    try {
-      await updateJob(jobId, userId, {
-        status: "analyzing",
-        stage: "ingesting",
-        progress: 5,
-      });
-      const result = await processJob(jobId, userId);
-      if (result == null) {
-        // Deferred: lease/slot busy — keep credits reserved, stay queued for cron.
-        await updateJob(jobId, userId, {
-          status: "queued",
-          stage: "queued",
-          progress: 3,
-        }).catch(() => undefined);
-        return;
-      }
-      await finalizeJobCredits({
-        userId,
-        email,
-        jobId,
-        outcome: "consumed",
-      });
-    } catch (error) {
-      logError("processJob failed", {
-        jobId,
-        userId,
-        error: error instanceof Error ? error.message : "unknown",
-      });
+  /**
+   * Small jobs: try inline encode via after() (Vercel ~300s).
+   * Large jobs / external worker mode: stay queued for scripts/worker.ts or cron.
+   */
+  const totalBytes = job.total_bytes || 0;
+  const externalWorker = process.env.WORKER_EXTERNAL === "true";
+  const tooLargeForServerless = totalBytes > 120 * 1024 * 1024;
+
+  if (!externalWorker && !tooLargeForServerless) {
+    after(async () => {
       try {
+        await updateJob(jobId, userId, {
+          status: "analyzing",
+          stage: "ingesting",
+          progress: 5,
+        });
+        const result = await processJob(jobId, userId);
+        if (result == null) {
+          await updateJob(jobId, userId, {
+            status: "queued",
+            stage: "queued",
+            progress: 3,
+          }).catch(() => undefined);
+          return;
+        }
         await finalizeJobCredits({
           userId,
           email,
           jobId,
-          outcome: "restored",
+          outcome: "consumed",
         });
-      } catch (restoreError) {
-        logError("credit restore failed", {
+      } catch (error) {
+        logError("processJob failed", {
           jobId,
-          error:
-            restoreError instanceof Error ? restoreError.message : "unknown",
+          userId,
+          error: error instanceof Error ? error.message : "unknown",
         });
+        try {
+          await finalizeJobCredits({
+            userId,
+            email,
+            jobId,
+            outcome: "restored",
+          });
+        } catch (restoreError) {
+          logError("credit restore failed", {
+            jobId,
+            error:
+              restoreError instanceof Error ? restoreError.message : "unknown",
+          });
+        }
       }
-    }
-  });
+    });
+  }
 
   return NextResponse.json({
     ok: true,
     status: "queued",
     creditsCharged: amount,
+    deferredToWorker: externalWorker || tooLargeForServerless,
     softLimitWarning: softLimitDurationMessage(
       job.eta_seconds ||
         Math.max(60, Math.round((job.total_bytes || 0) / (1024 * 1024) * 2.2))

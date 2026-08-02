@@ -38,10 +38,13 @@ export const shareCreateBodySchema = z.object({
 export const checkoutCreateBodySchema = z.object({
   product: z.enum([
     "subscription",
+    "subscription_ultra",
     "credits_small",
     "credits_medium",
     "credits_large",
+    "credits_studio",
   ]),
+  interval: z.enum(["monthly", "annual"]).optional(),
 });
 
 export const jobProcessBodySchema = z
