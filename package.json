@@ -40,14 +40,14 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
-    "@types/pg": "^8.20.0",
+    "@types/pg": "^8.20.3",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.12",
     "tailwindcss": "^4",
-    "typescript": "^5",
     "tsx": "^4.19.2",
+    "typescript": "^5",
     "vercel": "^57.0.0",
     "vitest": "^3.2.7"
   }
