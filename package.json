@@ -9,7 +9,8 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "setup:creem": "node scripts/setup-creem.mjs"
+    "setup:creem": "node scripts/setup-creem.mjs",
+    "worker": "tsx scripts/worker.ts"
   },
   "dependencies": {
     "@creem_io/nextjs": "^0.5.2",
@@ -46,6 +47,7 @@
     "eslint-config-next": "16.2.12",
     "tailwindcss": "^4",
     "typescript": "^5",
+    "tsx": "^4.19.2",
     "vercel": "^57.0.0",
     "vitest": "^3.2.7"
   }

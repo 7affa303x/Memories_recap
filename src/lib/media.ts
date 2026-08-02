@@ -7,17 +7,19 @@ export const MAX_FILES_PER_JOB = 8;
  * Per-file ceiling — honest for serverless encode window.
  * Larger files need the dedicated worker path (future).
  */
-export const MAX_FILE_BYTES = 768 * 1024 * 1024; // 768 MB
-export const MAX_BYTES_PER_JOB = 1536 * 1024 * 1024; // 1.5 GB
+export const MAX_FILE_BYTES = 2048 * 1024 * 1024; // 2 GB
+export const MAX_BYTES_PER_JOB = 4096 * 1024 * 1024; // 4 GB
 
 /**
- * Supabase Free plan global storage limit is 50 MB.
- * Files at or above this use Vercel Blob instead.
+ * Supabase Storage with Signed Upload URLs bypasses the 50MB PostgREST limit.
+ * We now use Supabase for everything to support 1GB+ files.
  */
-export const SUPABASE_DIRECT_MAX_BYTES = 45 * 1024 * 1024;
+export const SUPABASE_DIRECT_MAX_BYTES = 5 * 1024 * 1024 * 1024; // 5 GB
 
 export function usesBlobUpload(sizeBytes: number) {
-  return sizeBytes >= SUPABASE_DIRECT_MAX_BYTES;
+  // Disable Vercel Blob as it has a 500MB limit on Hobby plan.
+  // Supabase Storage supports up to 5GB via signed URLs.
+  return false;
 }
 
 export function isLikelyVideoFile(name: string, type?: string | null) {
