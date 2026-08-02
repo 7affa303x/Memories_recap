@@ -1,4 +1,4 @@
-import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { customAlphabet } from "nanoid";
 import { getServiceSupabase } from "@/lib/supabase/admin";
 import type {
@@ -399,5 +399,202 @@ export async function listRecentJobsForRecovery(limit = 50) {
     .limit(limit);
     
   if (error) throw new Error(error.message);
-  return data as JobRow[];
+  return (data || []) as JobRow[];
+}
+
+async function readShareIndex(token: string): Promise<ShareIndex | null> {
+  const supabase = getServiceSupabase();
+  const { data, error } = await supabase.storage
+    .from("app-data")
+    .download(`shares/${token}.json`);
+  if (error || !data) return null;
+  try {
+    return JSON.parse(await data.text()) as ShareIndex;
+  } catch {
+    return null;
+  }
+}
+
+async function writeShareIndex(token: string, index: ShareIndex) {
+  const supabase = getServiceSupabase();
+  const body = JSON.stringify(index, null, 2);
+  const { error } = await supabase.storage
+    .from("app-data")
+    .upload(`shares/${token}.json`, body, {
+      contentType: "application/json",
+      upsert: true,
+    });
+  if (error) throw new Error(error.message);
+}
+
+export async function purgeExpiredRecapMedia(
+  jobIdValue: string,
+  userId: string
+): Promise<boolean> {
+  const recap = await getRecap(jobIdValue, userId);
+  if (!recap || !isRecapExpired(recap)) return false;
+  const mediaPaths = [
+    recap.landscape_path,
+    recap.vertical_path,
+    recap.highlights_path,
+    recap.story_path,
+    recap.tiktok_path,
+    recap.preview_path,
+  ].filter(Boolean) as string[];
+  if (mediaPaths.length === 0) return false;
+  await Promise.all(mediaPaths.map((p) => deleteMediaObject(p)));
+  const supabase = getServiceSupabase();
+  await supabase
+    .from("recaps")
+    .update({
+      landscape_path: null,
+      vertical_path: null,
+      highlights_path: null,
+      story_path: null,
+      tiktok_path: null,
+      preview_path: null,
+    })
+    .eq("job_id", jobIdValue)
+    .eq("user_id", userId);
+  return true;
+}
+
+export async function restoreRecapVersion(
+  jobIdValue: string,
+  userId: string,
+  generation: number
+) {
+  // Version history not fully dual-written in PG yet — current generation only.
+  const recap = await getRecap(jobIdValue, userId);
+  if (!recap?.landscape_path) return null;
+  if (recap.current_generation && recap.current_generation !== generation) {
+    return null;
+  }
+  return recap;
+}
+
+export async function setRecapRating(
+  jobIdValue: string,
+  userId: string,
+  rating: number
+) {
+  const supabase = getServiceSupabase();
+  const clamped = Math.max(1, Math.min(5, Math.round(rating)));
+  const { data, error } = await supabase
+    .from("recaps")
+    .update({
+      rating: clamped,
+      rated_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("job_id", jobIdValue)
+    .eq("user_id", userId)
+    .select("*")
+    .single();
+  if (error) return null;
+  return data as RecapRow;
+}
+
+export async function setRecapPreviewPath(
+  jobIdValue: string,
+  userId: string,
+  previewPath: string
+) {
+  const supabase = getServiceSupabase();
+  const { data, error } = await supabase
+    .from("recaps")
+    .update({
+      preview_path: previewPath,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("job_id", jobIdValue)
+    .eq("user_id", userId)
+    .select("*")
+    .single();
+  if (error) return null;
+  return data as RecapRow;
+}
+
+export async function ensureShareLink(
+  jobIdValue: string,
+  userId: string,
+  options?: {
+    expiresInDays?: number;
+    password?: string | null;
+    audience?: "public" | "family" | null;
+  }
+) {
+  const job = await getJobForUser(jobIdValue, userId);
+  if (!job) throw new Error("Job not found");
+
+  const token = job.share_token || shareToken();
+  const expiresAt = options?.expiresInDays
+    ? new Date(
+        Date.now() + options.expiresInDays * 24 * 60 * 60 * 1000
+      ).toISOString()
+    : job.share_expires_at ||
+      new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+
+  const passwordHash = options?.password
+    ? hashSharePassword(options.password)
+    : job.share_password_hash;
+
+  const audience = options?.audience ?? null;
+
+  const updated = await updateJob(jobIdValue, userId, {
+    share_token: token,
+    share_expires_at: expiresAt,
+    share_password_hash: passwordHash,
+  });
+
+  const existing = await readShareIndex(token);
+  const index: ShareIndex = {
+    token,
+    job_id: jobIdValue,
+    user_id: userId,
+    expires_at: expiresAt,
+    password_hash: passwordHash,
+    created_at: existing?.created_at || new Date().toISOString(),
+    audience,
+    view_count: existing?.view_count || 0,
+    last_viewed_at: existing?.last_viewed_at || null,
+  };
+  await writeShareIndex(token, index);
+  return { job: updated, token, expiresAt, audience };
+}
+
+export async function getShareByToken(token: string) {
+  const fromFile = await readShareIndex(token);
+  if (fromFile) return fromFile;
+
+  // Fallback: look up by jobs.share_token
+  const supabase = getServiceSupabase();
+  const { data } = await supabase
+    .from("jobs")
+    .select("id, user_id, share_token, share_expires_at, share_password_hash, created_at")
+    .eq("share_token", token)
+    .maybeSingle();
+  if (!data?.share_token) return null;
+  return {
+    token: data.share_token,
+    job_id: data.id,
+    user_id: data.user_id,
+    expires_at: data.share_expires_at,
+    password_hash: data.share_password_hash,
+    created_at: data.created_at,
+    view_count: 0,
+    last_viewed_at: null,
+  } satisfies ShareIndex;
+}
+
+export async function recordShareView(token: string) {
+  const share = await getShareByToken(token);
+  if (!share) return null;
+  const next: ShareIndex = {
+    ...share,
+    view_count: (share.view_count || 0) + 1,
+    last_viewed_at: new Date().toISOString(),
+  };
+  await writeShareIndex(token, next).catch(() => undefined);
+  return next;
 }

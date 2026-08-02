@@ -45,9 +45,9 @@ export function friendlyFileLimitMessage(kind: "file" | "total" | "count") {
     return `Take your time — up to ${MAX_FILES_PER_JOB} videos in one recap works best.`;
   }
   if (kind === "file") {
-    return "That one clip is a bit heavy for one file (max ~768 MB). Split it or compress a little — we’re still here for the rest.";
+    return `That one clip is too heavy for one file (max ~${Math.round(MAX_FILE_BYTES / (1024 * 1024))} MB). Split it or compress a little.`;
   }
-  return "This batch is over ~1.5 GB total. Remove one clip or split into two recaps — your memories are worth a clean render.";
+  return `This batch is over ~${(MAX_BYTES_PER_JOB / (1024 * 1024 * 1024)).toFixed(1)} GB total. Remove one clip or split into two recaps.`;
 }
 
 export function formatLimitHint() {

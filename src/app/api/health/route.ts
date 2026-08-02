@@ -83,9 +83,21 @@ export async function GET() {
   }
 
   const billingConfigured =
-    provider === "gumroad"
-      ? Boolean(checks.gumroadToken)
-      : Boolean(checks.creemKey);
+    provider === "whop"
+      ? Boolean(
+          process.env.WHOP_API_KEY &&
+            process.env.WHOP_COMPANY_ID &&
+            (process.env.WHOP_PRODUCT_SUBSCRIPTION ||
+              process.env.WHOP_PLAN_PRO_MONTHLY)
+        )
+      : provider === "gumroad"
+        ? Boolean(checks.gumroadToken)
+        : Boolean(checks.creemKey);
+
+  checks.whopKey = Boolean(process.env.WHOP_API_KEY);
+  checks.whopCompany = Boolean(process.env.WHOP_COMPANY_ID);
+  checks.whopWebhook = Boolean(process.env.WHOP_WEBHOOK_SECRET);
+  checks.workerExternal = process.env.WORKER_EXTERNAL === "true";
 
   const ok =
     checks.app &&
